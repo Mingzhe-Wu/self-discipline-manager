@@ -1,0 +1,35 @@
+{
+    "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+    "appId": "com.self-discipline-manager.app",
+    "productName": "Self Discipline Manager",
+    "directories": {
+        "output": "release",
+        "buildResources": "resources"
+    },
+    "files": [
+        "out/**/*",
+        "drizzle/**/*",
+        "resources/tray-icon.png",
+        "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": ["node_modules/better-sqlite3/**/*"],
+    "npmRebuild": false,
+    "forceCodeSigning": false,
+    "win": {
+        "target": [{ "target": "nsis", "arch": ["x64"] }],
+        "executableName": "Self Discipline Manager",
+        "icon": "resources/app.ico",
+        "signExecutable": false
+    },
+    "nsis": {
+        "oneClick": false,
+        "perMachine": false,
+        "allowToChangeInstallationDirectory": true,
+        "createDesktopShortcut": true,
+        "createStartMenuShortcut": true,
+        "runAfterFinish": false,
+        "deleteAppDataOnUninstall": false,
+        "artifactName": "Self-Discipline-Manager-${version}-${arch}-Setup.${ext}"
+    }
+}
