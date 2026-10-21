@@ -1,4 +1,4 @@
-import type { TaskDeletionReceipt, OccurrenceTarget, UpdateOccurrenceTimesInput, UpdateOccurrencePlanInput, CreateTaskInput, Task, TaskOccurrence, WeekSchedule } from "../shared/types/task";
+import type { TaskDeletionReceipt, ResizeOccurrenceInput, OccurrenceTarget, UpdateOccurrenceTimesInput, UpdateOccurrencePlanInput, CreateTaskInput, Task, TaskOccurrence, WeekSchedule } from "../shared/types/task";
 import type { PlanningHours } from "../shared/types/settings";
 export {};
 
@@ -7,6 +7,7 @@ declare global {
         electronAPI: {
             getPlanningHours: () => Promise<PlanningHours>;
             updatePlanningHours: (input: PlanningHours) => Promise<PlanningHours>;
+            resizeTaskOccurrence: (input: ResizeOccurrenceInput) => Promise<TaskOccurrence>;
             updateTaskOccurrencePlan: (input: UpdateOccurrencePlanInput) => Promise<Task>;
             onWindowShown: (callback: () => void) => () => void;
             listTasks: () => Promise<Task[]>;

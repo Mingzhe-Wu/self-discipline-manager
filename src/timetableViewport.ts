@@ -3,6 +3,12 @@ import { Temporal } from "@js-temporal/polyfill";
 export const TIMETABLE_HEADER_HEIGHT = 76;
 export const VISIBLE_PLANNING_MINUTES = 480;
 
+/** One pointer clock for the visual guide and direct endpoint editing. */
+export function pointerClockMinute(clientY: number, timelineTop: number, density: number, origin: number, visibleTop: number, visibleBottom: number): number {
+    const y = Math.max(visibleTop, Math.min(visibleBottom, clientY));
+    return Math.max(0, Math.min(1435, Math.round((origin + (y - timelineTop) / density) / 5) * 5));
+}
+
 /** Eight wall-clock hours fit the available scrollport, not the whole planning day. */
 export function viewportDensity(viewportHeight: number, headerHeight = TIMETABLE_HEADER_HEIGHT) {
     return Math.max(0.25, (viewportHeight - headerHeight - 16) / VISIBLE_PLANNING_MINUTES);

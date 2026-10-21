@@ -6,6 +6,7 @@ import type { ActualEndpoint, ActualTimes, TimelineScale } from '../actualTimeli
 import { errorMessage } from '../taskFormatting';
 import './ActualTimelineEditor.css';
 import ActualEndpointControl from './ActualEndpointControl';
+import Icon from './Icon';
 
 interface Props {
     occurrence: ScheduledOccurrence;
@@ -16,8 +17,7 @@ interface Props {
     onSave?: (input: UpdateOccurrenceTimesInput) => Promise<TaskOccurrence>;
     onDetached?: (taskId: number) => void;
     information?: ReactNode;
-    beforeTiming?: ReactNode;
-    hidePlannedSummary?: boolean;
+    informationActions?: ReactNode;
 }
 
 interface Drag {
@@ -61,7 +61,7 @@ function deltaLabel(delta: number | null): string {
     return delta === null ? 'Not recorded' : delta === 0 ? 'On time' : `${durationLabel(delta)} ${delta < 0 ? 'early' : 'late'}`;
 }
 
-export default function ActualTimelineEditor({ occurrence, disabled = false, onChange, onBusyChange, onSuccess, onSave, onDetached, information, beforeTiming, hidePlannedSummary = false }: Props) {
+export default function ActualTimelineEditor({ occurrence, disabled = false, onChange, onBusyChange, onSuccess, onSave, onDetached, information, informationActions }: Props) {
     const incoming = { startedAt: occurrence.record?.startedAt ?? null, endedAt: occurrence.record?.endedAt ?? null };
     const [actual, setActual] = useState<ActualTimes>(incoming);
     const [legacyCompleted, setLegacyCompleted] = useState(occurrence.record?.legacyCompleted ?? false);
@@ -155,13 +155,20 @@ export default function ActualTimelineEditor({ occurrence, disabled = false, onC
             }
         };
         document.addEventListener('keydown', cancel, true);
-        return () => document.removeEventListener('keydown', cancel, true);
+        window.addEventListener('blur', cancelDrag);
+        return () => {
+            document.removeEventListener('keydown', cancel, true);
+            window.removeEventListener('blur', cancelDrag);
+        };
     }, [frozenScale, cancelDrag]);
 
     const scale = frozenScale ?? timelineScale(occurrence.scheduledStartAt, occurrence.scheduledEndAt, actual.startedAt, actual.endedAt);
     const plannedBar = timelineBar(occurrence.scheduledStartAt, occurrence.scheduledEndAt, scale);
     const actualBar = actual.startedAt !== null && actual.endedAt !== null ? timelineBar(actual.startedAt, actual.endedAt, scale) : null;
     const statistics = actualStatistics(occurrence.scheduledStartAt, occurrence.scheduledEndAt, actual);
+    const tickStep = ([5, 15, 30, 60, 120, 240, 360, 720].find(minutes => minutes * 60_000 >= (scale.end - scale.start) / 5) ?? 1440) * 60_000;
+    const ticks: number[] = [];
+    for (let value = Math.ceil(scale.start / tickStep) * tickStep; value <= scale.end; value += tickStep) ticks.push(value);
     const unknown = legacyCompleted && actual.startedAt === null && actual.endedAt === null;
     const missingLabel = unknown ? 'Unknown (imported record)' : 'Not recorded';
     const locked = disabled || busy;
@@ -213,8 +220,7 @@ export default function ActualTimelineEditor({ occurrence, disabled = false, onC
         const bounds = track.current.getBoundingClientRect(), width = bounds.width;
         if (width <= 0) return false;
         element.setPointerCapture(pointerId);
-        // Side buttons sit outside the track. Translate their pointer into the
-        // endpoint's track position so holding one does not immediately hit an edge.
+        // Anchor the pointer to the endpoint even when grabbing a handle off-center.
         const pointerOffset = bounds.left + timelinePosition(actual[endpoint]!, scale) / 100 * width - clientX;
         const active: Drag = { endpoint, pointerId, element, scale, initial: actual, current: actual, initialX: clientX, anchorValue: actual[endpoint]!, lastX: clientX, pointerOffset, moved: false, width, timer: 0 };
         drag.current = active;
@@ -272,7 +278,7 @@ export default function ActualTimelineEditor({ occurrence, disabled = false, onC
     }
 
     function endpointControl(endpoint: ActualEndpoint) {
-        return <ActualEndpointControl endpoint={endpoint} value={actual[endpoint]} fallback={endpoint === 'startedAt' ? occurrence.scheduledStartAt : actual.startedAt ?? occurrence.scheduledEndAt} disabled={locked} selectingDisabled={locked || !!frozenScale} onChange={value => void save({ ...actual, [endpoint]: value })} onHold={({ element, pointerId, clientX }) => beginDragAt(endpoint, element, pointerId, clientX)} onMove={previewDrag} onRelease={endDrag} onCancel={cancelDrag} onKeyDown={event => adjustEndpoint(endpoint, event)} />;
+        return <ActualEndpointControl endpoint={endpoint} value={actual[endpoint]} fallback={endpoint === 'startedAt' ? occurrence.scheduledStartAt : actual.startedAt ?? occurrence.scheduledEndAt} disabled={locked} selectingDisabled={locked || !!frozenScale} onChange={value => void save({ ...actual, [endpoint]: value })} />;
     }
 
     function handle(endpoint: ActualEndpoint) {
@@ -282,38 +288,53 @@ export default function ActualTimelineEditor({ occurrence, disabled = false, onC
         return <button key={endpoint} type="button" className={`actual-drag-handle ${endpoint === 'startedAt' ? 'is-start' : 'is-end'}`} role="slider" aria-label={`${label} drag handle`} aria-valuemin={Math.min(scale.start, value)} aria-valuemax={Math.max(scale.end, value)} aria-valuenow={value} aria-valuetext={timestampLabel(value)} title={`Drag ${label.toLowerCase()} · ${timestampLabel(value)}`} disabled={locked} style={{ left: `${timelinePosition(value, scale)}%` }} onPointerDown={event => beginDrag(endpoint, event)} onPointerMove={previewDrag} onPointerUp={endDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag} onKeyDown={event => adjustEndpoint(endpoint, event)}><span className="sr-only">{label}</span></button>;
     }
 
+    function timeMarker(label: string, value: number | null) {
+        if (value === null) return null;
+        return <span className="timeline-time-marker" style={{ left: `clamp(22px, ${timelinePosition(value, scale)}%, calc(100% - 22px))` }}><span className="sr-only">{label}</span><time dateTime={new Date(value).toISOString()} title={`${label} · ${timestampLabel(value)}`}>{new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</time></span>;
+    }
+
     return <section ref={editor} className={`actual-timeline-editor${information ? ' is-integrated' : ''}`} aria-label="Planned versus actual time" aria-busy={busy}>
-        {information ?? <div className="actual-timeline-heading"><h4>Planned &amp; actual</h4><span>Same time scale · local time</span></div>}
-        {beforeTiming}
+        <section className="task-information-card" aria-label="Task information">
+        {information && <div className="task-information-fields">{information}</div>}
         <div className="actual-time-summary">
-            {!hidePlannedSummary && <p className="actual-range-label"><strong>Planned</strong> {timestampLabel(occurrence.scheduledStartAt)} – {timestampLabel(occurrence.scheduledEndAt)}</p>}
-            <p className="actual-range-label" aria-live="polite"><strong>Actual</strong> {actual.startedAt === null ? missingLabel : timestampLabel(actual.startedAt)}{actual.startedAt !== null && <> – {actual.endedAt === null ? 'Unfinished · end not recorded' : timestampLabel(actual.endedAt)}</>}</p>
+            <p className="actual-range-label"><strong><Icon name="calendar" />Planned</strong><span>{timestampLabel(occurrence.scheduledStartAt)} – {timestampLabel(occurrence.scheduledEndAt)}</span></p>
+            <p className="actual-range-label" aria-live="polite"><strong><Icon name="clock" />Actual</strong><span>{actual.startedAt === null ? missingLabel : timestampLabel(actual.startedAt)}{actual.startedAt !== null && <> – {actual.endedAt === null ? 'Unfinished · end not recorded' : timestampLabel(actual.endedAt)}</>}</span></p>
         </div>
+        {informationActions}
+        </section>
+        <section className="timing-summary-card" aria-label="Timing summary">
+        <h4 className="timing-summary-heading">Timing summary</h4>
         <dl className="actual-timeline-statistics">
-            <div><dt>Start</dt><dd>{statistics.startDelta === null ? missingLabel : deltaLabel(statistics.startDelta)}</dd></div>
-            <div><dt>End</dt><dd>{statistics.endDelta === null ? actual.startedAt === null ? missingLabel : 'Unfinished' : deltaLabel(statistics.endDelta)}</dd></div>
-            <div><dt>Planned duration</dt><dd>{durationLabel(statistics.plannedDuration)}</dd></div>
-            <div><dt>Actual duration</dt><dd>{statistics.actualDuration === null ? unknown ? 'Unknown' : actual.startedAt === null ? 'Not recorded' : 'Unfinished' : durationLabel(statistics.actualDuration)}</dd></div>
-            {statistics.durationDelta !== null && <div className="actual-duration-difference"><dt>Difference</dt><dd>{statistics.durationDelta === 0 ? 'Same duration' : `${durationLabel(statistics.durationDelta)} ${statistics.durationDelta > 0 ? 'longer' : 'shorter'}`}</dd></div>}
+            <div className="timing-stat timing-stat-start"><dt><Icon name="clock" />Start</dt><dd>{statistics.startDelta === null ? missingLabel : deltaLabel(statistics.startDelta)}</dd></div>
+            <div className="timing-stat timing-stat-end"><dt><Icon name="check" />End</dt><dd>{statistics.endDelta === null ? actual.startedAt === null ? missingLabel : 'Unfinished' : deltaLabel(statistics.endDelta)}</dd></div>
+            <div className="timing-stat"><dt><Icon name="hourglass" />Planned duration</dt><dd>{durationLabel(statistics.plannedDuration)}</dd></div>
+            <div className="timing-stat"><dt><Icon name="clock" />Actual duration</dt><dd>{statistics.actualDuration === null ? unknown ? 'Unknown' : actual.startedAt === null ? 'Not recorded' : 'Unfinished' : durationLabel(statistics.actualDuration)}</dd></div>
+            <div className="timing-stat actual-duration-difference"><dt><Icon name="activity" />Difference</dt><dd>{statistics.durationDelta === null ? missingLabel : statistics.durationDelta === 0 ? 'Same duration' : `${durationLabel(statistics.durationDelta)} ${statistics.durationDelta > 0 ? 'longer' : 'shorter'}`}</dd></div>
         </dl>
-        <div className="actual-timeline-chart">
+        </section>
+        <section className="actual-comparison-card" aria-label="Planned and actual timeline">
+        <div className="actual-timeline-heading"><h4>Planned vs actual</h4><div className="timeline-legend"><span><i />Planned</span><span><i />Actual</span></div></div>
+        <section className="actual-timeline-chart" aria-label="Drag to adjust">
+            <h5 className="sr-only">Drag to adjust</h5>
+            <div className="timeline-time-axis" aria-hidden="true">{ticks.map(value => <span key={value} style={{ left: `${timelinePosition(value, scale)}%` }}>{new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>)}</div>
             <div className="actual-range-controls">
-                <div className="actual-planned-endpoint"><span className="actual-endpoint-label">Planned start</span><time className="actual-planned-time" aria-label="Planned start" dateTime={new Date(occurrence.scheduledStartAt).toISOString()} title={timestampLabel(occurrence.scheduledStartAt)}>{new Date(occurrence.scheduledStartAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</time></div>
-                <div className="actual-center-control"><span className="actual-row-label">Planned</span><div className="actual-timeline-track actual-plan-track" role="img" aria-label={`Planned time range: ${timestampLabel(occurrence.scheduledStartAt)} – ${timestampLabel(occurrence.scheduledEndAt)}`}><div className="actual-planned-bar" style={{ left: `${plannedBar.left}%`, width: `${plannedBar.width}%` }} /></div></div>
-                <div className="actual-planned-endpoint"><span className="actual-endpoint-label">Planned end</span><time className="actual-planned-time" aria-label="Planned end" dateTime={new Date(occurrence.scheduledEndAt).toISOString()} title={timestampLabel(occurrence.scheduledEndAt)}>{new Date(occurrence.scheduledEndAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</time></div>
-                <span aria-hidden="true" />
-                <div className="actual-center-control actual-interactive-track"><span className="actual-row-label">Actual</span><div className="actual-timeline-track" ref={track}>
+                <div className="actual-center-control"><span className="sr-only">Planned</span><div className="actual-timeline-track actual-plan-track" role="img" aria-label={`Planned time range: ${timestampLabel(occurrence.scheduledStartAt)} – ${timestampLabel(occurrence.scheduledEndAt)}`}><div className="actual-planned-bar" style={{ left: `${plannedBar.left}%`, width: `${plannedBar.width}%` }} /></div></div>
+                <div className="timeline-range-markers">{timeMarker('Planned start', occurrence.scheduledStartAt)}{timeMarker('Planned end', occurrence.scheduledEndAt)}</div>
+                <div className="actual-center-control actual-interactive-track"><span className="sr-only">Actual</span><div className="actual-timeline-track" ref={track}>
                     {actualBar && <div className="actual-recorded-bar" style={{ left: `${actualBar.left}%`, width: `${actualBar.width}%` }} />}
                     {actual.startedAt === null && actual.endedAt === null && <span className="actual-empty-label">{missingLabel}</span>}
                     {handle('startedAt')}{handle('endedAt')}
-                    <div className="actual-attached-endpoint is-start" style={{ left: `${timelinePosition(actual.startedAt ?? occurrence.scheduledStartAt, scale)}%` }}>{endpointControl('startedAt')}</div>
-                    <div className="actual-attached-endpoint is-end" style={{ left: `${timelinePosition(actual.endedAt ?? Math.max(actual.startedAt ?? occurrence.scheduledStartAt, occurrence.scheduledEndAt), scale)}%` }}>{endpointControl('endedAt')}</div>
                 </div></div>
-                <span aria-hidden="true" />
+                <div className="timeline-range-markers" aria-live="polite">{timeMarker('Actual start', actual.startedAt)}{timeMarker('Actual end', actual.endedAt)}</div>
             </div>
-        </div>
-        <div className="actual-editor-footer"><p className="form-hint">Set dates and times to backfill. Drag either recorded endpoint or use arrow keys in 5-minute steps. Escape cancels a drag.</p>{(actual.startedAt !== null || actual.endedAt !== null || unknown) && <button type="button" className="text-button" disabled={locked || !!frozenScale} onClick={() => void save({ startedAt: null, endedAt: null })}>Clear actual times</button>}</div>
+        </section>
+        <section className="actual-exact-input-area" aria-label="Exact time input">
+        <h5 className="actual-layer-heading">Exact time input</h5>
+        <div className="actual-time-selectors">{endpointControl('startedAt')}{endpointControl('endedAt')}</div>
+        <div className="actual-editor-footer"><p className="form-hint">Set dates and times to backfill. Drag either recorded endpoint or use the selectors above. Times change in 5-minute steps. Arrow keys adjust focused handles; Escape cancels a drag.</p>{(actual.startedAt !== null || actual.endedAt !== null || unknown) && <button type="button" className="text-button" disabled={locked || !!frozenScale} onClick={() => void save({ startedAt: null, endedAt: null })}>Clear actual times</button>}</div>
         {busy && <p role="status" className="actual-save-status">Saving actual time…</p>}
         {error && <p role="alert" className="actual-timeline-error">{error}</p>}
+        </section>
+        </section>
     </section>;
 }

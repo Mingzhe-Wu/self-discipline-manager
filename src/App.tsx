@@ -13,8 +13,9 @@ import type { PlanningHours } from "../shared/types/settings";
 import { DEFAULT_PLANNING_HOURS } from "../shared/scheduling/planningHours";
 import PlanningSettings from "./components/PlanningSettings";
 import type { QuickAddDraft } from "./timetableQuickAdd";
+import CtrlModeHelp from "./components/CtrlModeHelp";
 
-type View = { kind: "add"; draft?: QuickAddDraft } | { kind: "manage" | "settings" } | { kind: "details"; taskId: number; occurrence?: ScheduledOccurrence } | null;
+type View = { kind: "add"; draft?: QuickAddDraft } | { kind: "manage" | "settings" } | { kind: "edit-series"; taskId: number } | { kind: "details"; taskId: number; occurrence?: ScheduledOccurrence } | null;
 
 export default function App() {
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -100,6 +101,15 @@ export default function App() {
             setView(current => !scheduleChanged && current?.kind === "details" && current.taskId === saved.id ? current : { kind: "details", taskId: saved.id });
         } finally { setSaving(false); }
     }
+    async function saveSeries(taskId: number, input: CreateTaskInput) {
+        setSaving(true);
+        try {
+            await window.electronAPI.updateTask(taskId, input);
+            await reload();
+            setView({ kind: "manage" });
+            notify("Task updated.");
+        } finally { setSaving(false); }
+    }
     async function savePlanningHours(hours: PlanningHours) {
         setSaving(true);
         try {
@@ -123,16 +133,16 @@ export default function App() {
                         <button type="button" className="icon-button" aria-label="Previous week" title="Previous week" onClick={() => navigate(shiftWeek(from, -1, timeZone))}><Icon name="chevron-left" /></button>
                         <button type="button" className="secondary-button" aria-current={currentWeek ? "date" : undefined} onClick={thisWeek}>This week</button>
                         <button type="button" className="icon-button" aria-label="Next week" title="Next week" onClick={() => navigate(to)}><Icon name="chevron-right" /></button>
-                    </div><select aria-label="Completion filter" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All tasks</option><option value="incomplete">Incomplete</option><option value="completed">Completed</option></select><button type="button" className="secondary-button" onClick={() => setView({ kind: "settings" })}>Planning hours</button><button ref={addButton} type="button" className="primary-button" onClick={() => setView({ kind: "add" })} aria-label="Add Task"><Icon name="plus" />Add Task</button></div>
+                    </div><select aria-label="Completion filter" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All tasks</option><option value="incomplete">Incomplete</option><option value="completed">Completed</option></select><button type="button" className="secondary-button toolbar-task-action" onClick={() => setView({ kind: "manage" })}>Manage recurring tasks</button><button type="button" className="secondary-button toolbar-task-action" onClick={() => setView({ kind: "settings" })}>Planning hours</button><button ref={addButton} type="button" className="primary-button toolbar-task-action" onClick={() => setView({ kind: "add" })} aria-label="Add Task"><Icon name="plus" />Add Task</button><CtrlModeHelp /></div>
                 </nav>
                 {error && <div role="alert" className="notice error app-notice"><div><strong>Couldn’t load your week.</strong><p>Try again in a moment.</p><details className="error-details"><summary>More information</summary><p>{error}</p></details></div><button type="button" onClick={() => { void reload().catch((error) => setError(errorMessage(error))); }}>Try again</button></div>}
                 {loading ? <div className="loading-state" role="status"><Icon name="calendar" /><p>Loading your week…</p></div> : <>
                     <WeekSchedule from={from} tasks={data.tasks} occurrences={data.occurrences} now={now} timeZone={timeZone} filter={filter} planningHours={planningHours} showRevision={showRevision} centerRevision={centerRevision} dataReady={loadedFrom === from} onQuickAdd={quickAdd} quickAddEnabled={view === null} onChange={reload} onSelect={(taskId, occurrence) => setView({ kind: "details", taskId, occurrence })} />
                     {data.occurrences.length === 0 && <div className="empty-week"><p>{data.tasks.length === 0 ? "Your week starts here." : "Nothing scheduled this week."}</p><span>{data.tasks.length === 0 ? "Add a task to give your plans a place." : "Choose another week or add a task."}</span></div>}
                 </>}
-                <footer className="workspace-footer"><button type="button" className="text-button" onClick={() => setView({ kind: "manage" })}>Manage recurring tasks</button></footer>
             </div>
             {view?.kind === "add" && <Dialog key="add" title="Add Task" busy={saving} fallbackFocus={addButton} onClose={() => setView(null)}><TaskForm initialPlan={view.draft} planningHours={planningHours} onSave={create} onCancel={() => setView(null)} /></Dialog>}
+            {view?.kind === "edit-series" && selected && <Dialog key={`edit-series:${selected.id}`} title="Edit recurring task" busy={saving} fallbackFocus={addButton} onClose={() => setView({ kind: "manage" })}><TaskForm task={selected} planningHours={planningHours} onSave={(input) => saveSeries(selected.id, input)} onCancel={() => setView({ kind: "manage" })} /></Dialog>}
             {view?.kind === "details" && selected && <Dialog key={`details:${selected.id}`} title="Task details" busy={saving} fallbackFocus={addButton} panel closeLabel="Close details" onClose={() => setView(null)}><TaskDetails task={selected} occurrence={selectedOccurrence} now={now} revision={revision} onChange={reload} onBusyChange={setSaving} onDetached={(taskId) => setView({ kind: "details", taskId })} onClose={(receipt) => {
                 setView(null);
                 notify("Task Deleted", { expiresAt: receipt.expiresAt, action: { label: "Undo", run: async () => {
@@ -143,7 +153,7 @@ export default function App() {
                 void reload().catch((error) => setError(errorMessage(error)));
             }} planningHours={planningHours} onSave={(input, sync) => save(selected.id, input, sync)} /></Dialog>}
             {view?.kind === "settings" && <Dialog title="Planning hours" busy={saving} fallbackFocus={addButton} onClose={() => setView(null)}><PlanningSettings settings={planningHours} onSave={savePlanningHours} onCancel={() => setView(null)} /></Dialog>}
-            {view?.kind === "manage" && <Dialog key="manage" title="Manage recurring tasks" fallbackFocus={addButton} onClose={() => setView(null)}><div className="task-picker">{recurringTasks.length === 0 ? <div className="empty-list"><p>No recurring tasks yet.</p><button className="primary-button" type="button" onClick={() => setView({ kind: "add" })}>Add Task</button></div> : <><p className="form-hint">Recurring series, including those outside this week.</p><ul>{recurringTasks.map((task) => <li key={task.id}><button type="button" onClick={() => setView({ kind: "details", taskId: task.id })}><span>{task.title}</span><Icon name="chevron-right" /></button></li>)}</ul></>}</div></Dialog>}
+            {view?.kind === "manage" && <Dialog key="manage" title="Manage recurring tasks" fallbackFocus={addButton} onClose={() => setView(null)}><div className="task-picker">{recurringTasks.length === 0 ? <div className="empty-list"><p>No recurring tasks yet.</p><button className="primary-button" type="button" onClick={() => setView({ kind: "add" })}>Add Task</button></div> : <><p className="form-hint">Recurring series, including those outside this week.</p><ul>{recurringTasks.map((task) => <li key={task.id}><button type="button" onClick={() => setView({ kind: "edit-series", taskId: task.id })}><span>{task.title}</span><Icon name="chevron-right" /></button></li>)}</ul></>}</div></Dialog>}
         </main>
     );
 }

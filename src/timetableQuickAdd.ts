@@ -16,3 +16,10 @@ export function quickAddDraft(date: string, offsetPixels: number, density: numbe
     if (start < wake || start >= latestEnd) return null;
     return { date, startTime: clock(start), endTime: clock(Math.min(start + 60, latestEnd)) };
 }
+
+/** Preview a second-click same-day range, never an inverted/zero duration. */
+export function quickAddSelection(draft: QuickAddDraft, offsetPixels: number, density: number, origin: number, hours: PlanningHours): QuickAddDraft {
+    const start = minutes(draft.startTime);
+    const end = Math.max(start + 5, Math.min(Math.min(minutes(hours.sleepTime), 1435), Math.round((origin + offsetPixels / density) / 5) * 5));
+    return { ...draft, endTime: clock(end) };
+}

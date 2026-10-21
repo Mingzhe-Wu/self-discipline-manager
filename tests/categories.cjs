@@ -77,5 +77,5 @@ test('forms, tiny/grouped cards and details expose category without category sta
  assert.match(html,/is-grouped/);assert.match(html,/is-micro/);assert.match(html,/task-category-emoji[^>]*>📚/);assert.match(html,/task-card-title">Algorithms/);
  assert.match(html,/Study category, Algorithms/);assert.match(html,/data-state="planned"/);assert.doesNotMatch(html,/category-study|category-work/);
  const form=renderToStaticMarkup(React.createElement(TaskForm,{task:a,onSave:async()=>{},onCancel(){}}));assert.match(form,/aria-label="Category"/);assert.match(form,/value="study" selected="">📚 Study/);
- const details=renderToStaticMarkup(React.createElement(TaskDetails,{task:a,now,revision:0,onChange:async()=>{},onClose(){},onEdit(){},onBusyChange(){}}));assert.ok(details.includes("<dt>Category</dt><dd>📚 Study</dd>"));
+ const details=renderToStaticMarkup(React.createElement(TaskDetails,{task:a,now,revision:0,onChange:async()=>{},onClose(){},onEdit(){},onBusyChange(){}}));assert.match(details, /<dt>[\s\S]*?Category<\/dt><dd><span class="detail-category-badge">📚 Study<\/span><\/dd>/);
 });

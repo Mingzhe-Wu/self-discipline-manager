@@ -1,6 +1,14 @@
 const assert=require('node:assert/strict');const {test}=require('node:test');require('./register-typescript.cjs');
 const {viewportDensity,currentTimePosition,centeredScrollTop,timelineTicks}=require('../src/timetableViewport.ts');
 const {defaultWindowBounds}=require('../electron/window/windowSizing.ts');
+const {pointerClockMinute}=require('../src/timetableViewport.ts');
+
+test('pointer guide and resizing share one snapped clock regardless of handle grab offset',()=>{
+ assert.equal(pointerClockMinute(103,100,2,720,0,1000),720);
+ assert.equal(pointerClockMinute(110,100,2,720,0,1000),725);
+ assert.equal(pointerClockMinute(440,-1000,2,0,100,900),720);
+ assert.equal(pointerClockMinute(9999,0,1,0,0,1440),1435);
+});
 test('viewport holds eight hours at density without compressing a longer planning day',()=>{for(const height of [500,700,950]){const density=viewportDensity(height);assert.equal((height-76-16)/density,480);assert.ok(900*density>height-76-16);}});
 test('current time position uses local wall time and planning origin',()=>{const at=Date.parse('2026-10-20T15:23Z');assert.deepEqual(currentTimePosition(at,'UTC',480,1380,1),{top:443,visible:true});assert.equal(currentTimePosition(at,'UTC',1000,1380,1).visible,false);});
 test('initial/show centering clamps boundaries and does not require repeated timer recentering',()=>{assert.equal(centeredScrollTop(0,480,1380,1,676),0);assert.equal(centeredScrollTop(1440,480,1380,1,676),300);assert.equal(centeredScrollTop(923,480,1380,1,676),143);assert.deepEqual(timelineTicks(485,1375),[485,600,720,840,960,1080,1200,1320,1375]);});

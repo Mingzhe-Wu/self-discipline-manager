@@ -59,6 +59,13 @@ export type UpdateOccurrenceTimesInput = OccurrenceTarget & { startedAt: number 
 
 export type UpdateOccurrencePlanInput = { target: OccurrenceTarget; changes: CreateTaskInput; sync: boolean };
 
+export interface ResizeOccurrenceInput {
+    target: OccurrenceTarget;
+    edge: "start" | "end";
+    at: number;
+    expectedState: "planned" | "in-progress" | "completed";
+}
+
 export interface ScheduledOccurrence {
     taskId: number;
     scheduledStartAt: number;

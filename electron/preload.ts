@@ -1,11 +1,12 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { OccurrenceTarget, UpdateOccurrenceTimesInput, UpdateOccurrencePlanInput, CreateTaskInput } from "../shared/types/task";
+import type { ResizeOccurrenceInput, OccurrenceTarget, UpdateOccurrenceTimesInput, UpdateOccurrencePlanInput, CreateTaskInput } from "../shared/types/task";
 
 import type { PlanningHours } from "../shared/types/settings";
 
 contextBridge.exposeInMainWorld("electronAPI", {
     getPlanningHours: () => ipcRenderer.invoke("settings:planning-hours"),
     updatePlanningHours: (input: PlanningHours) => ipcRenderer.invoke("settings:update-planning-hours", input),
+    resizeTaskOccurrence: (input: ResizeOccurrenceInput) => ipcRenderer.invoke("task:resize-occurrence", input),
     updateTaskOccurrencePlan: (input: UpdateOccurrencePlanInput) => ipcRenderer.invoke("task:update-occurrence-plan", input),
     onWindowShown: (callback: () => void) => {
         const listener = () => callback();

@@ -20,8 +20,9 @@ async function until(check, name) { for (let i=0;i<140;i++) { if(await check()) 
   await page.reload();await page.getByRole('region',{name:'Weekly schedule',exact:true}).waitFor();
   const rows=()=>page.evaluate(()=>window.electronAPI.listTasks());
   async function remove(title){
-   if(title==='Undo series'){await page.getByRole('button',{name:'Manage recurring tasks',exact:true}).click();await page.locator('.task-picker').getByRole('button',{name:title,exact:true}).click();}
-   else {const id=originals.a.id;let card=page.locator('.occurrence-card[data-task-id="'+id+'"]').first();if(!await card.count())await page.getByRole('button',{name:'Next week',exact:true}).click();await card.waitFor();await card.scrollIntoViewIfNeeded();await card.hover();await until(async()=>(await card.getAttribute('class')).includes('is-expanded'),'card expanded');await card.locator('.card-content').evaluate(el=>Promise.all(el.getAnimations().map(a=>a.finished)));await card.getByRole('button',{name:'Details for '+title,exact:true}).click();}
+   const id=title==='Undo series'?originals.b.id:originals.a.id;
+   if(!await page.locator('.occurrence-card[data-task-id="'+id+'"]').count())await page.getByRole('button',{name:'Next week',exact:true}).click();
+   await require('./open-timetable-details.cjs')(page,id,title);
   const dialog=page.getByRole('dialog',{name:'Task details',exact:true});await dialog.getByRole('button',{name:'Delete task',exact:true}).click();await dialog.getByRole('button',{name:'Confirm delete',exact:true}).click();await dialog.waitFor({state:'hidden'});}
   await remove(originals.a.title);const deletion=page.locator('.app-toast').filter({hasText:'Task Deleted'});await deletion.waitFor();await until(async()=>!(await rows()).some(t=>t.id===originals.a.id),'task removed');
   const text=await deletion.locator('span').first().boundingBox(),undo=await deletion.getByRole('button',{name:'Undo',exact:true}).boundingBox();assert.ok(undo.x>text.x,'Undo is right of message');

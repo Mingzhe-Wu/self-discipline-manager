@@ -11,6 +11,9 @@ import { getPlanningHours } from "./settingsService";
 
 import { occurrenceState } from "../../shared/occurrenceLifecycle";
 import { occurrenceDisplayRange } from "../../shared/scheduling/occurrenceDisplay";
+import { resizeField, resizeOccurrenceRange } from "../../shared/scheduling/occurrenceResize";
+import type { ResizeOccurrenceInput } from "../../shared/types/task";
+import { Temporal } from "@js-temporal/polyfill";
 
 const DAY = 86400000;
 
@@ -271,6 +274,43 @@ export function correctOccurrenceTimes(input: UpdateOccurrenceTimesInput): TaskO
         scheduleEffectiveAt: original.scheduledStartAt, generatedThrough: original.scheduledStartAt, createdAt: now, updatedAt: now,
     }, { startedAt: input.startedAt, endedAt: input.endedAt, recordedAt: original.recordedAt ?? now,
         progressSource: original.recordedAt === null ? "backfill" : "corrected", legacyCompleted: false, updatedAt: now });
+}
+
+/** A direct correction affects this occurrence only; a recurring parent is never rewritten. */
+export function resizeOccurrence(input: ResizeOccurrenceInput): TaskOccurrence {
+    if (!input || !["start", "end"].includes(input.edge)) throw new Error("Invalid resize request");
+    validateTime(input.at);
+    const task = requireTask(input.target?.taskId), original = resolveOccurrence(input.target);
+    if (isExcluded(task, original.scheduledStartAt, original.scheduledEndAt)) throw new Error("Task occurrence was excluded from its schedule");
+    if (occurrenceState(original) !== input.expectedState) throw new Error("Task state changed; refresh and try again");
+    const occurrence = { taskId: task.id, scheduledStartAt: original.scheduledStartAt, scheduledEndAt: original.scheduledEndAt, record: original };
+    const field = resizeField(occurrence, input.edge);
+    const at = Temporal.Instant.fromEpochMilliseconds(input.at).toZonedDateTimeISO(task.timeZone);
+    if (at.minute % 5 || at.second || at.millisecond) throw new Error("Choose times in five-minute steps");
+    const previous = original[field];
+    if (previous === input.at) return original;
+    if (previous === null || !Temporal.Instant.fromEpochMilliseconds(previous).toZonedDateTimeISO(task.timeZone).toPlainDate().equals(at.toPlainDate())) throw new Error("Drag within the same day (00:00–23:55); use Details for other dates");
+    const next = resizeOccurrenceRange(occurrence, input.edge, input.at);
+    const planned = field === "scheduledStartAt" || field === "scheduledEndAt";
+    if (planned) {
+        validatePlannedInstants(next.scheduledStartAt, next.scheduledEndAt, task.timeZone);
+        assertPlanningRange(next.scheduledStartAt, next.scheduledEndAt, task.timeZone, getPlanningHours());
+    }
+    const now = Date.now();
+    if (task.scheduleType === "recurring") return repository.detachOccurrenceWithActual(original, {
+        title: task.title, category: task.category, enabled: task.enabled, origin: task.origin, timeZone: task.timeZone,
+        scheduleType: "one-time", recurrenceRule: null, scheduledStartAt: next.scheduledStartAt, scheduledEndAt: next.scheduledEndAt,
+        scheduleEffectiveAt: next.scheduledStartAt, generatedThrough: next.scheduledStartAt, createdAt: now, updatedAt: now,
+    }, { startedAt: next.startedAt, endedAt: next.endedAt,
+        recordedAt: planned ? original.recordedAt : original.recordedAt ?? now,
+        progressSource: planned ? original.progressSource : original.recordedAt === null ? "backfill" : "corrected",
+        legacyCompleted: original.legacyCompleted, updatedAt: now });
+    if (planned) {
+        repository.correctOneTimePlan(task.id, original.id, { scheduledStartAt: next.scheduledStartAt, scheduledEndAt: next.scheduledEndAt,
+            scheduleEffectiveAt: next.scheduledStartAt, generatedThrough: next.scheduledStartAt, updatedAt: now });
+        return repository.getOccurrence(task.id, original.id)!;
+    }
+    return updateOccurrenceTimes({ taskId: task.id, occurrenceId: original.id, startedAt: next.startedAt, endedAt: next.endedAt });
 }
 
 export function setTaskEnabled(id: number, enabled: boolean): void {

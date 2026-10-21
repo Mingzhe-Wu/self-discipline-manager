@@ -1,0 +1,33 @@
+.task-details { min-width: 0; }
+.task-details .task-information-card { display: flex; flex-direction: column; box-sizing: border-box; }
+.task-details .task-information-fields { margin-bottom: 22px; }
+.task-details .task-information-text h3 { font-size: 23px; font-weight: 650; letter-spacing: -.4px; margin: 0 0 24px; }
+.task-details .detail-facts { gap: 18px; margin: 0; }
+.task-details .detail-facts > div { grid-template-columns: 118px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 26px; }
+.task-details .detail-facts dt { display: flex; align-items: center; gap: 10px; color: #61738b; }
+.task-details .detail-facts .icon { width: 17px; height: 17px; flex-shrink: 0; }
+.detail-category-badge { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 8px; background: #f3f5f8; color: #334155; font-weight: 500; }
+.task-details .detail-edit-controls { margin: 0; padding-top: 14px; border-top: 1px solid #edf1f5; }
+.task-details .actual-time-summary { margin-bottom: 16px; }
+.task-details .detail-edit-controls .form-hint { font-size: 11px; }
+.task-details .detail-edit-switch { margin-left: auto; flex-shrink: 0; color: #61738b; font-size: 12px; }
+.task-details .inline-task-form { margin: 0; }
+.task-details .inline-task-form > fieldset { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 10px 12px; }
+.task-details .inline-task-form > fieldset > :not(label), .task-details .inline-task-form .notification-field, .task-details .inline-task-form .sync-occurrences-field { grid-column: 1 / -1; }
+.task-details .inline-task-form .schedule-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; }
+.task-details .inline-task-form .schedule-fields > label:first-of-type { grid-column: auto; }
+.task-details .inline-task-form label:not(.notification-field):not(.weekday-option):not(.sync-occurrences-field) { gap: 5px; font-size: 11px; }
+.task-details .inline-task-form input:not([type=checkbox]), .task-details .inline-task-form select { min-height: 32px; padding: 6px 8px; font-size: 12px; }
+.task-details .inline-task-form .schedule-time-field select { height: 32px; }
+.task-details .inline-task-form .form-hint { font-size: 11px; }
+.task-details .inline-task-form .notification-field { border-bottom: 0; padding: 8px 0 0; font-size: 12px; }
+.task-details .history-disclosure { margin-top: 16px; padding: 16px; border: 1px solid #e1e7ef; border-radius: 12px; background: #fafbfd; }
+.task-details .history-disclosure summary { font-size: 12px; color: #43556d; }
+.task-details .detail-footer { margin-top: 20px; padding-top: 18px; border-top: 1px solid #e8edf3; }
+.task-details .detail-footer > .danger-button { display: inline-flex; align-items: center; gap: 8px; color: #a34348; border-color: #e8c9cc; background: #fff; }
+.task-details .detail-footer > .danger-button:hover { background: #fcf3f3; border-color: #d9a9ae; }
+.task-details .detail-footer > .danger-button .icon { width: 16px; height: 16px; }
+@container (max-width: 430px) {
+    .task-details .detail-facts > div { grid-template-columns: 106px minmax(0, 1fr); }
+    .task-details .inline-task-form .schedule-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

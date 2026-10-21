@@ -3,6 +3,10 @@ const { test } = require('node:test');
 require('./register-typescript.cjs');
 const { defaultEndTime, moveStartTime } = require('../src/taskFormTimes.ts');
 
+test('a start-only quick-add draft keeps end empty when its start is changed',()=>{
+ assert.equal(moveStartTime('13:00','','13:30',false),'');
+});
+
 test('new tasks start with one hour and moving start preserves duration', () => {
     assert.equal(defaultEndTime('09:00'), '10:00');
     assert.equal(moveStartTime('09:00', '10:30', '11:15', false), '12:45');

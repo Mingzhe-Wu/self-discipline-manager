@@ -9,6 +9,7 @@ import { DEFAULT_PLANNING_HOURS, assertPlanningRange } from "../../shared/schedu
 import { defaultEndTime, moveStartTime } from "../taskFormTimes";
 import { errorMessage, localDateInput } from "../taskFormatting";
 import type { QuickAddDraft } from "../timetableQuickAdd";
+import Icon from "./Icon";
 
 const weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const timeOptions = Array.from({ length: 288 }, (_, index) => `${String(Math.floor(index / 12)).padStart(2, "0")}:${String(index % 12 * 5).padStart(2, "0")}`);
@@ -19,8 +20,9 @@ export default function TaskForm({ task, occurrence, initialPlan, planningHours 
     const initialEnd = task ? Temporal.Instant.fromEpochMilliseconds(occurrence?.scheduledEndAt ?? task.scheduledEndAt).toZonedDateTimeISO(timeZone) : null;
     const [createdAt] = useState(Date.now);
     const initialDate = initialStart?.toPlainDate().toString() ?? initialPlan?.date ?? localDateInput(createdAt);
-    const initialStartTime = initialStart?.toPlainTime().toString({ smallestUnit: initialStart.second || initialStart.millisecond ? "millisecond" : "minute" }) ?? initialPlan?.startTime ?? (planningHours.wakeTime <= "09:00" && planningHours.sleepTime > "10:00" ? "09:00" : planningHours.wakeTime);
-    const initialEndTime = initialEnd?.toPlainTime().toString({ smallestUnit: initialEnd.second || initialEnd.millisecond ? "millisecond" : "minute" }) ?? initialPlan?.endTime ?? defaultEndTime(initialStartTime);
+    const seriesRule = !occurrence ? task?.recurrenceRule : undefined;
+    const initialStartTime = seriesRule?.startTime ?? initialStart?.toPlainTime().toString({ smallestUnit: initialStart.second || initialStart.millisecond ? "millisecond" : "minute" }) ?? initialPlan?.startTime ?? (planningHours.wakeTime <= "09:00" && planningHours.sleepTime > "10:00" ? "09:00" : planningHours.wakeTime);
+    const initialEndTime = seriesRule?.endTime ?? initialEnd?.toPlainTime().toString({ smallestUnit: initialEnd.second || initialEnd.millisecond ? "millisecond" : "minute" }) ?? initialPlan?.endTime ?? defaultEndTime(initialStartTime);
     const [category, setCategory] = useState<TaskCategory>(categoryMetadata(task?.category).key);
     const [title, setTitle] = useState(task?.title ?? "");
     const [scheduleType, setScheduleType] = useState<"one-time" | "recurring">(task?.scheduleType ?? "one-time");
@@ -91,7 +93,7 @@ export default function TaskForm({ task, occurrence, initialPlan, planningHours 
     }
     const startOptions = timeOptions.filter((time) => time >= planningHours.wakeTime && time < planningHours.sleepTime);
     const endOptions = timeOptions.filter((time) => time > planningHours.wakeTime && time <= planningHours.sleepTime);
-    const options = (value: string, allowed: string[]) => <>{!allowed.includes(value) && <option value={value}>{value}{task && (value === initialStartTime || value === initialEndTime) ? " (saved)" : " (outside planning hours)"}</option>}{allowed.map((time) => <option key={time} value={time}>{time}</option>)}</>;
+    const options = (value: string, allowed: string[]) => <>{!allowed.includes(value) && <option value={value}>{value === "" ? "Choose time" : <>{value}{task && (value === initialStartTime || value === initialEndTime) ? " (saved)" : " (outside planning hours)"}</>}</option>}{allowed.map((time) => <option key={time} value={time}>{time}</option>)}</>;
 
     if (readOnly && task) {
         const metadata = categoryMetadata(task.category), rule = task.recurrenceRule;
@@ -99,9 +101,9 @@ export default function TaskForm({ task, occurrence, initialPlan, planningHours 
         return <div className="task-information-text">
             <h3>{task.title}</h3>
             <dl className="detail-facts">
-                <div><dt>Category</dt><dd>{metadata.emoji} {metadata.label}</dd></div>
-                <div><dt>Schedule</dt><dd>{rule ? `${rule.frequency === "daily" ? "Daily" : `Weekly · ${rule.weekdays.map(day => dayNames[day]).join(", ")}`} · ${rule.startTime}–${rule.endTime}` : "One-time"}</dd></div>
-                <div><dt>Notifications</dt><dd>{task.enabled ? "On" : "Off"}</dd></div>
+                <div><dt><Icon name="tag" />Category</dt><dd><span className="detail-category-badge">{metadata.emoji} {metadata.label}</span></dd></div>
+                <div><dt><Icon name="calendar" />Schedule</dt><dd>{rule ? `${rule.frequency === "daily" ? "Daily" : `Weekly · ${rule.weekdays.map(day => dayNames[day]).join(", ")}`} · ${rule.startTime}–${rule.endTime}` : "One-time"}</dd></div>
+                <div><dt><Icon name="bell" />Notifications</dt><dd>{task.enabled ? "On" : "Off"}</dd></div>
                 {timeZone !== Intl.DateTimeFormat().resolvedOptions().timeZone && <div><dt>Schedule zone</dt><dd>{timeZone}</dd></div>}
             </dl>
         </div>;
@@ -129,14 +131,14 @@ export default function TaskForm({ task, occurrence, initialPlan, planningHours 
                         <label className="schedule-date">Date<input aria-label="Date" type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></label>
                     ) : (
                         <>
-                            <label>Recurrence<select aria-label="Repeat" value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)}>
+                            <label className="schedule-time-field">Recurrence<select aria-label="Repeat" value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)}>
                                 <option value="daily">Daily</option><option value="weekly">Weekly</option>
                             </select></label>
                             {!recurringSelection && <label>Start date<input type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>}
                         </>
                     )}
-                    <label>Start Time<select aria-label="Start Time" required value={startTime} onChange={(event) => { const next = event.target.value; setEndTime(moveStartTime(startTime, endTime, next, manualEndEdit)); setStartTime(next); }}>{options(startTime, startOptions)}</select></label>
-                    <label>End Time<select aria-label="End Time" required value={endTime} onChange={(event) => { setEndTime(event.target.value); setManualEndEdit(true); }}>{options(endTime, endOptions)}</select></label>
+                    <label className="schedule-time-field">Start Time<select aria-label="Start Time" required value={startTime} onChange={(event) => { const next = event.target.value; setEndTime(moveStartTime(startTime, endTime, next, manualEndEdit)); setStartTime(next); }}>{options(startTime, startOptions)}</select></label>
+                    <label className="schedule-time-field">End Time<select aria-label="End Time" required value={endTime} onChange={(event) => { setEndTime(event.target.value); setManualEndEdit(true); }}>{options(endTime, endOptions)}</select></label>
                     {effectiveScheduleType === "recurring" && frequency === "weekly" && <fieldset className="weekday-fields">
                         <legend>Weekdays</legend>
                         {weekdays.map((day, index) => {

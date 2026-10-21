@@ -5,5 +5,6 @@ const clock = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2,
 export function defaultEndTime(start: string): string { return clock(minutes(start) + 60); }
 
 export function moveStartTime(start: string, end: string, nextStart: string, manuallyEditedEnd: boolean): string {
+    if (end === '') return '';
     return manuallyEditedEnd ? end : clock(minutes(nextStart) + minutes(end) - minutes(start));
 }

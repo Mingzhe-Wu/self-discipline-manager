@@ -128,7 +128,8 @@ export function detachOccurrenceWithActual(original: OccurrenceRecord, taskValue
         transaction.insert(recurrenceExclusionsTable).values({ taskId: original.taskId, scheduledStartAt: original.scheduledStartAt,
             scheduledEndAt: original.scheduledEndAt, createdAt: taskValues.createdAt }).run();
         const task = transaction.insert(tasksTable).values(taskValues).returning().get();
-        return transaction.update(taskOccurrencesTable).set({ ...actualValues, taskId: task.id })
+        return transaction.update(taskOccurrencesTable).set({ ...actualValues, taskId: task.id,
+            scheduledStartAt: task.scheduledStartAt, scheduledEndAt: task.scheduledEndAt })
             .where(and(eq(taskOccurrencesTable.id, original.id), eq(taskOccurrencesTable.taskId, original.taskId))).returning().get();
     });
 }

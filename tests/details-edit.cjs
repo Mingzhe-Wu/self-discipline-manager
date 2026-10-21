@@ -3,10 +3,28 @@ const start=Date.parse('2026-10-20T12:00Z'),task={id:1,title:'Compact details',c
 test('details opens as unified read-only information with Edit switch and always-available actual controls',()=>{const html=renderToStaticMarkup(React.createElement(Details,{task,now:start,revision:0,onChange:async()=>{},onBusyChange(){},onClose(){},onSave:async()=>{}}));assert.match(html,/role="switch"[^>]*aria-label="Edit task information"/);assert.match(html,/<h3>Compact details<\/h3>/);assert.doesNotMatch(html,/aria-label="Task title"/);assert.doesNotMatch(html,/Edit planned task/);assert.match(html,/Actual start time \(local\)/);assert.match(html,/Actual end time \(local\)/);assert.equal((html.match(/role="slider"/g)||[]).length,2);assert.ok(html.indexOf('Edit task information')<html.indexOf('actual-timeline-statistics'));assert.ok(html.indexOf('Edit task information')<html.indexOf('actual-timeline-chart'));});
 test('inline edit reuses planned-form validation and exposes metadata inputs without a separate dialog or duplicate actions',()=>{const html=renderToStaticMarkup(React.createElement(Form,{task,formId:'task-information',hideActions:true,onSave:async()=>{},onCancel(){}}));assert.match(html,/<form[^>]*id="task-information"/);assert.match(html,/aria-label="Task title"/);assert.match(html,/aria-label="Category"/);assert.doesNotMatch(html,/Save Task|Create Task/);});
 
-test('Actual time controls are anchored to their handle positions beneath the track',()=>{
+test('visual drag area and exact selectors occupy separate layers',()=>{
  const html=renderToStaticMarkup(React.createElement(Details,{task,now:start,revision:0,onChange:async()=>{},onBusyChange(){},onClose(){}}));
- const {timelineScale,timelinePosition}=require('../src/actualTimeline.ts'),scale=timelineScale(task.scheduledStartAt,task.scheduledEndAt,task.currentOccurrence.startedAt,task.currentOccurrence.endedAt);
- const left=html.match(/actual-attached-endpoint is-start" style="left:([^%]+)%/),right=html.match(/actual-attached-endpoint is-end" style="left:([^%]+)%/);assert.ok(left&&right);assert.equal(Number(left[1]),timelinePosition(task.currentOccurrence.startedAt,scale));assert.equal(Number(right[1]),timelinePosition(task.currentOccurrence.endedAt,scale));assert.doesNotMatch(html,/actual-time-selectors/);
+ const visual=html.indexOf('aria-label="Drag to adjust"'),exact=html.indexOf('aria-label="Exact time input"');assert.ok(visual>=0&&exact>visual);
+ const chart=html.slice(visual,exact),fields=html.slice(exact);
+ assert.equal((chart.match(/role="slider"/g)||[]).length,2);
+ assert.doesNotMatch(chart,/<select|actual-endpoint-button|Clear actual times/);
+ assert.match(chart,/timeline-time-axis/);assert.match(chart,/timeline-time-marker/);
+ assert.match(fields,/actual-time-selectors/);assert.match(fields,/Choose actual start time/);assert.match(fields,/Choose actual end time/);assert.match(fields,/Clear actual times/);
+ assert.doesNotMatch(html,/actual-attached-endpoint/);
 });
 
-test('Actual attached controls expose click menus with accessible keyboard buttons',()=>{const html=renderToStaticMarkup(React.createElement(Details,{task,now:start,revision:0,onChange:async()=>{},onBusyChange(){},onClose(){}}));assert.match(html,/aria-label="Choose actual start time" aria-haspopup="dialog"/);assert.match(html,/aria-label="Choose actual end time" aria-haspopup="dialog"/);assert.equal((html.match(/popover="auto" role="dialog"/g)||[]).length,2);});
+test('Exact time controls expose click menus with accessible keyboard buttons',()=>{const html=renderToStaticMarkup(React.createElement(Details,{task,now:start,revision:0,onChange:async()=>{},onBusyChange(){},onClose(){}}));assert.match(html,/aria-label="Choose actual start time" aria-haspopup="dialog"/);assert.match(html,/aria-label="Choose actual end time" aria-haspopup="dialog"/);assert.equal((html.match(/popover="auto" role="dialog"/g)||[]).length,2);});
+
+test('details separates Timing summary and keeps Edit in the first card',()=>{
+ const html=renderToStaticMarkup(React.createElement(Details,{task,now:start,revision:0,onChange:async()=>{},onBusyChange(){},onClose(){}}));
+ const info=html.indexOf('aria-label="Task information"'),summary=html.indexOf('aria-label="Timing summary"'),timeline=html.indexOf('aria-label="Planned and actual timeline"');
+ assert.ok(info>=0&&summary>info&&timeline>summary);
+ const card=html.slice(info,summary),statistics=html.slice(summary,timeline);
+ for(const text of ['Compact details','Category','Schedule','Notifications','actual-time-summary','Edit task information'])assert.ok(card.includes(text));
+ assert.doesNotMatch(card,/actual-timeline-statistics/);
+ assert.equal((statistics.match(/class="timing-stat/g)||[]).length,5);
+ assert.doesNotMatch(statistics,/Edit task information/);
+ assert.doesNotMatch(html,/history-disclosure|History · actual times/);
+ assert.doesNotMatch(html,/<details[^>]* open/);
+});
