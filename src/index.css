@@ -311,7 +311,7 @@ h1, h2, h3, p { margin: 0; }
 .timetable-resize-preview { position: absolute; left: 50%; top: -24px; transform: translateX(-50%); padding: 2px 7px; border-radius: 4px; background: #eff6ff; border: 1px solid #b7cce1; color: #294e73; font-size: 11px; white-space: nowrap; pointer-events: none; }
 
 /* Arm lifecycle clicks only once this whole-capsule expansion has finished. */
-.occurrence-card.is-expanded .card-content { transform-origin: var(--expand-origin-x, 50%) 50%; animation: task-card-expand 100ms ease-out both; }
+.occurrence-card.is-expanded .card-content { transform-origin: var(--expand-origin-x, 50%) var(--expand-origin-y, 0%); animation: task-card-expand 100ms ease-out both; }
 @keyframes task-card-expand {
     from { transform: scale(var(--expand-scale-x, 1), var(--expand-scale-y, 1)); opacity: .65; }
     to { transform: scale(1); opacity: 1; }

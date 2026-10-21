@@ -7,7 +7,7 @@ This is one local identity and one set of preferences for this installation. The
 Migration `0008_local_profile_settings.sql` creates two singleton tables (primary key constrained to `1`):
 
 - `local_profiles`: display name, created/updated timestamps. The default name is **Local User**. Missing defaults are automatically recreated without replacing existing preferences.
-- `user_settings`: Wake/Sleep, default duration, week start, notification master switch, future mini-schedule preference and close-to-tray. An internal `notifications_resume_at` watermark controls delivery resumption; it is not an editable UI field.
+- `user_settings`: Wake/Sleep, default duration, week start, notification master switch, floating mini-view startup preference and close-to-tray. An internal `notifications_resume_at` watermark controls delivery resumption; it is not an editable UI field.
 
 The migration copies existing `planning_settings.wake_time/sleep_time` into `user_settings` before dropping the old table. Fresh installations receive 00:00–24:00 display hours, 60-minute duration, Monday start, notifications on, mini schedule off and close-to-tray on. Existing per-task notification flags remain untouched; there was no pre-existing global notification switch or persisted default duration/week start to import.
 
@@ -39,7 +39,7 @@ Week start supports Monday/Sunday, changes column order/navigation boundaries an
 
 Turning notifications off suppresses future native delivery globally without changing task flags or durable slots. Turning them back on stores a resume timestamp: only slots whose target is at/after that timestamp are eligible. An unsent slot that elapsed while disabled is not replayed, even after restart. Upcoming future slots follow the existing latest-slot/idempotency policy.
 
-Close-to-tray defaults to the previous hide behavior. Turning it off uses normal application quit and cleanup when closing the main window. The tray mini-schedule flag is persisted and clearly labeled as a future capability; no mini view is implemented.
+Close-to-tray defaults to the previous hide behavior. Turning it off uses normal application quit and cleanup when closing the main window. The mini-schedule flag now opens a floating Today ball on startup; the tray can show/hide it independently. See [Desktop mini view](desktop-mini-view.md) for docking, fullscreen visibility and synchronization.
 
 ## Verification and intentional deferrals
 
@@ -47,6 +47,6 @@ Close-to-tray defaults to the previous hide behavior. Turning it off uses normal
 
 `tests/verify-profile-settings-copy.cjs` opens the existing database read-only, uses SQLite's online backup to include committed WAL data, and upgrades only the workspace copy. Verified real snapshot: migration count **8 → 9**; **17 Tasks, 73 occurrences, 31 reminder slots and 2 exclusions** preserved with identical row hashes; Wake/Sleep preserved; integrity and foreign keys passed. Evidence: `release/verification/profile-migration-0idaw0/result.json` (ignored generated output). The live database was not migrated by this check.
 
-Drizzle generation reports no remaining schema diff. No NSIS rebuild, real-profile app launch, cloud/user-account work or tray mini implementation was performed.
+Drizzle generation reports no remaining schema diff. That settings-only verification did not rebuild NSIS or launch the real profile. The subsequent mini implementation is documented separately in [Desktop mini view](desktop-mini-view.md).
 
 Unified saving uses the narrow updateLocalPreferences IPC operation. Settings Service validates profile and settings before Settings Repository commits both rows in one transaction; earlier narrow update methods remain compatible for internal callers.

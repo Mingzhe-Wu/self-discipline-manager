@@ -43,7 +43,7 @@ export default function SettingsPanel({ preferences, onSave, onBusyChange }: {
             <label className="settings-checkbox"><input type="checkbox" checked={settings.closeToTray} onChange={event => change("closeToTray", event.target.checked)} />Close to tray</label>
             <p className="form-hint">* When disabled, closing the window quits the app instead of minimizing it to the Windows tray. Notifications are not sent while the app is closed.</p>
             <label className="settings-checkbox"><input type="checkbox" checked={settings.trayMiniEnabled} onChange={event => change("trayMiniEnabled", event.target.checked)} />Mini schedule enabled</label>
-            <p className="form-hint">Mini schedule preference is saved for a future update; the mini view is not available yet.</p>
+            <p className="form-hint">Show the floating Today ball on startup. Click to expand or drag to a screen edge to tuck it away. Hide or reopen it anytime from the Windows tray.</p>
         </fieldset></section>
         <div className="settings-save-actions"><button type="submit" className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save"}</button></div>
     </form>;

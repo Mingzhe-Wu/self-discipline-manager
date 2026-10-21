@@ -32,7 +32,7 @@ export function centeredScrollTop(minute: number, startMinute: number, endMinute
 
 export function timelineTicks(start: number, end: number) {
     const ticks = [start];
-    for (let minute = Math.ceil((start + 1) / 120) * 120; minute < end; minute += 120) ticks.push(minute);
+    for (let minute = Math.ceil((start + 1) / 60) * 60; minute < end; minute += 60) ticks.push(minute);
     if (end !== start) ticks.push(end);
     return ticks;
 }

@@ -7,7 +7,7 @@ import { occurrenceDisplayRange } from "../../shared/scheduling/occurrenceDispla
 import { lifecycleToast, useToast } from "../toast";
 import { occurrenceState } from "../../shared/occurrenceLifecycle";
 import { errorMessage } from "../taskFormatting";
-import { layoutOverlaps, displayRangeGeometry, splitOccurrenceDisplaySegments } from "../timetableLayout";
+import { layoutOverlaps, displayRangeGeometry, splitOccurrenceDisplaySegments, hoverExpansionOffset } from "../timetableLayout";
 import type { DisplaySegment, OverlapLayout } from "../timetableLayout";
 
 import ResetOccurrenceDialog from "./ResetOccurrenceDialog";
@@ -28,6 +28,8 @@ function minuteLabel(minute: number) { return `${String(Math.floor(minute / 60))
 function OccurrenceCard({ task, segment, overlap, onChange, onSelect, onRequestReset, density, origin, suppressHover, timeZone, now }: { task: Task; segment: DisplayOccurrence; overlap: OverlapLayout; onChange: () => Promise<void>; onSelect: (id: number, occurrence: ScheduledOccurrence) => void; density: number; origin: number; suppressHover: boolean; timeZone: string; now: number; onRequestReset: (request: ResetRequest) => void }) {
     const notify = useToast();
     const [busy, setBusy] = useState(false);
+    const container = useRef<HTMLLIElement>(null);
+    const [expandUp, setExpandUp] = useState(false);
     const [hovered, setExpanded] = useState(false);
     const expanded = hovered && !suppressHover;
     const [error, setError] = useState("");
@@ -46,9 +48,20 @@ function OccurrenceCard({ task, segment, overlap, onChange, onSelect, onRequestR
     const geometry = displayRangeGeometry(displayedSegment.startMinute - origin, displayedSegment.endMinute - origin, density);
     const rangeLabel = `${minuteLabel(displayedSegment.startMinute)}–${minuteLabel(displayedSegment.endMinute)}`;
     const expandedHeight = Math.max(120, geometry.height);
-    const expandedTop = (geometry.height - expandedHeight) / 2;
+    const expandedTop = expandUp ? geometry.height - expandedHeight : 0;
     useLayoutEffect(() => { expansionReady.current = false; }, [expanded]);
-    function expand() { if (!suppressHover) setExpanded(true); }
+    function expand() {
+        if (suppressHover) return;
+        const element = container.current;
+        if (element) {
+            const bounds = element.getBoundingClientRect();
+            const viewport = element.closest(".week-scroll")?.getBoundingClientRect();
+            const timeline = element.parentElement?.getBoundingClientRect();
+            const bottom = Math.min(viewport?.bottom ?? window.innerHeight, timeline?.bottom ?? Infinity, window.innerHeight) - 4;
+            setExpandUp(hoverExpansionOffset(bounds.top, geometry.height, expandedHeight, bottom) < 0);
+        }
+        setExpanded(true);
+    }
     async function advance() {
         if (!expanded || !expansionReady.current || suppressHover || pending.current || resize.saving) return;
         if (missed) { onSelect(task.id, occurrence); return; }
@@ -69,8 +82,8 @@ function OccurrenceCard({ task, segment, overlap, onChange, onSelect, onRequestR
     const action = missed ? "Open details" : state === "planned" ? "Start" : state === "in-progress" ? "Finish" : "Reset";
     const actionText = missed ? "Open details" : state === "planned" ? "▶ Press to start" : state === "in-progress" ? "■ Press to finish" : "↺ Press to reset";
     return (
-        <li className={`occurrence-card${completed ? " is-completed" : ""}${expanded ? " is-expanded" : ""}${resize.resizing ? " is-resizing" : ""}${overlap.groupSize > 1 ? " is-grouped" : ""}${geometry.height < 60 ? " is-short" : ""}${geometry.height < 44 ? " is-tiny" : ""}${geometry.height < 18 ? " is-micro" : ""}`} data-state={state} data-task-id={task.id} data-scheduled-at={occurrence.scheduledStartAt} data-scheduled-start-at={occurrence.scheduledStartAt} data-scheduled-end-at={occurrence.scheduledEndAt} data-overlap-count={overlap.groupSize} data-group-size={overlap.groupSize} data-group-column={overlap.column} data-planned-height={geometry.plannedHeight}
-            style={{ top: geometry.top, height: Math.max(geometry.height, 1), "--card-column": overlap.column, "--card-columns": overlap.groupSize, "--card-width": overlap.widthFraction, "--card-offset": overlap.offsetFraction, "--card-layer": overlap.zIndex, "--expanded-top": `${expandedTop}px`, "--expanded-height": `${expandedHeight}px`, "--expand-scale-x": overlap.widthFraction, "--expand-scale-y": Math.min(1, geometry.height / expandedHeight), "--expand-origin-x": `${overlap.groupSize > 1 ? 100 * overlap.column / (overlap.groupSize - 1) : 50}%` } as CSSProperties}
+        <li ref={container} className={`occurrence-card${completed ? " is-completed" : ""}${expanded ? " is-expanded" : ""}${resize.resizing ? " is-resizing" : ""}${overlap.groupSize > 1 ? " is-grouped" : ""}${geometry.height < 60 ? " is-short" : ""}${geometry.height < 44 ? " is-tiny" : ""}${geometry.height < 18 ? " is-micro" : ""}`} data-state={state} data-task-id={task.id} data-scheduled-at={occurrence.scheduledStartAt} data-scheduled-start-at={occurrence.scheduledStartAt} data-scheduled-end-at={occurrence.scheduledEndAt} data-overlap-count={overlap.groupSize} data-group-size={overlap.groupSize} data-group-column={overlap.column} data-planned-height={geometry.plannedHeight}
+            style={{ top: geometry.top, height: Math.max(geometry.height, 1), "--card-column": overlap.column, "--card-columns": overlap.groupSize, "--card-width": overlap.widthFraction, "--card-offset": overlap.offsetFraction, "--card-layer": overlap.zIndex, "--expanded-top": `${expandedTop}px`, "--expand-origin-y": expandUp ? "100%" : "0%", "--expanded-height": `${expandedHeight}px`, "--expand-scale-x": overlap.widthFraction, "--expand-scale-y": Math.min(1, geometry.height / expandedHeight), "--expand-origin-x": `${overlap.groupSize > 1 ? 100 * overlap.column / (overlap.groupSize - 1) : 50}%` } as CSSProperties}
             onMouseEnter={(event) => { if (!event.ctrlKey) expand(); }} onMouseLeave={() => setExpanded(false)}
             onFocusCapture={(event) => { if (event.target.matches(":focus-visible")) expand(); }}
             onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget) && !event.currentTarget.matches(":hover")) setExpanded(false); }}

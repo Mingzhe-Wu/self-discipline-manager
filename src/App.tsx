@@ -1,3 +1,4 @@
+import type { MiniTaskDetails } from "../shared/types/mini";
 import { useToast } from "./toast";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CreateTaskInput, ScheduledOccurrence, WeekSchedule as WeekData } from "../shared/types/task";
@@ -28,6 +29,7 @@ export default function App() {
     const [centerRevision, setCenterRevision] = useState(0);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState("all");
+    const [externalDetails, setExternalDetails] = useState<MiniTaskDetails | null>(null);
     const [view, setView] = useState<View>(null);
     const quickAdd = useCallback((draft: QuickAddDraft) => setView((current) => current ?? { kind: "add", draft }), []);
     const [preferences, setPreferences] = useState<LocalPreferences | null>(null);
@@ -72,6 +74,12 @@ export default function App() {
         window.addEventListener("focus", refresh);
         return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus", refresh); };
     }, [reload, from]);
+    useEffect(() => window.electronAPI.onDataChanged(() => { void reload().catch(error => setError(errorMessage(error))); }), [reload]);
+    useEffect(() => window.electronAPI.onOpenTaskDetails(details => {
+        setExternalDetails(details);
+        setView({ kind: "details", taskId: details.task.id, occurrence: details.occurrence });
+        void reload().catch(error => setError(errorMessage(error)));
+    }), [reload]);
     useEffect(() => window.electronAPI.onWindowShown(() => {
         pendingWindowCenter.current = true;
         setNow(Date.now());
@@ -128,7 +136,7 @@ export default function App() {
         try { await reload(); } catch (error) { setError(errorMessage(error)); }
         return saved;
     }
-    const selected = view && "taskId" in view ? data.tasks.find((task) => task.id === view.taskId) : undefined;
+    const selected = view && "taskId" in view ? data.tasks.find((task) => task.id === view.taskId) ?? (externalDetails?.task.id === view.taskId ? externalDetails.task : undefined) : undefined;
     const selectedContext = view && "occurrence" in view ? view.occurrence : undefined;
     const selectedOccurrence = selectedContext ? data.occurrences.find((row) => row.taskId === selectedContext.taskId && row.scheduledStartAt === selectedContext.scheduledStartAt && row.scheduledEndAt === selectedContext.scheduledEndAt) ?? (selected?.currentOccurrence && selected.currentOccurrence.id === selectedContext.record?.id ? { ...selectedContext, record: selected.currentOccurrence } : selectedContext) : undefined;
     const currentWeek = from === weekRange(now, timeZone, settings.weekStartsOn).from;
@@ -152,7 +160,7 @@ export default function App() {
             </div>
             {view?.kind === "add" && <Dialog key="add" title="Add Task" busy={saving} fallbackFocus={addButton} onClose={() => setView(null)}><TaskForm initialPlan={view.draft} defaultDurationMinutes={settings.defaultTaskDurationMinutes} planningHours={planningHours} onSave={create} onCancel={() => setView(null)} /></Dialog>}
             {view?.kind === "edit-series" && selected && <Dialog key={`edit-series:${selected.id}`} title="Edit recurring task" busy={saving} fallbackFocus={addButton} onClose={() => setView({ kind: "center" })}><TaskForm task={selected} planningHours={planningHours} onSave={(input) => saveSeries(selected.id, input)} onCancel={() => setView({ kind: "center" })} /></Dialog>}
-            {view?.kind === "details" && selected && <Dialog key={`details:${selected.id}`} title="Task details" busy={saving} fallbackFocus={addButton} panel closeLabel="Close details" onClose={() => setView(null)}><TaskDetails task={selected} occurrence={selectedOccurrence} now={now} revision={revision} onChange={reload} onBusyChange={setSaving} onDetached={(taskId) => setView({ kind: "details", taskId })} onLateStarted={(task) => {
+            {view?.kind === "details" && selected && <Dialog key={`details:${selected.id}:${selectedContext?.scheduledStartAt ?? "task"}:${selectedContext?.scheduledEndAt ?? ""}`} title="Task details" busy={saving} fallbackFocus={addButton} panel closeLabel="Close details" onClose={() => setView(null)}><TaskDetails task={selected} occurrence={selectedOccurrence} now={now} revision={revision} onChange={reload} onBusyChange={setSaving} onDetached={(taskId) => setView({ kind: "details", taskId })} onLateStarted={(task) => {
                 setData(current => ({ tasks: [...current.tasks.filter(row => row.id !== task.id), task], occurrences: [...current.occurrences, { taskId: task.id, scheduledStartAt: task.scheduledStartAt, scheduledEndAt: task.scheduledEndAt, record: task.currentOccurrence }] }));
                 navigate(weekRange(Date.now(), timeZone, settings.weekStartsOn).from);
                 setView({ kind: "details", taskId: task.id });

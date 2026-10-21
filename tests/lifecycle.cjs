@@ -64,6 +64,8 @@ async function boot({ lock = true, databaseError = false, loadError = false, clo
             trackWindowGeometry: () => () => calls.push('save-window'),
         },
         './services/settingsService': { getLocalPreferences: () => { calls.push('preferences'); return {}; }, getUserSettings: () => ({ closeToTray }) },
+        './window/miniWindow': { createMiniWindowController: () => ({ applyPreference: async () => {}, getWindow: () => null, dispose() {}, isVisible: () => false }) },
+        './ipc/miniIpc': { registerMiniIpc: () => {} },
         './ipc/settingsIpc': { registerSettingsIpc: () => {} },
         './ipc/taskIpc': { registerTaskIpc: () => calls.push('task-ipc') },
         './ipc/validateSender': { createSenderValidator: () => () => {} },

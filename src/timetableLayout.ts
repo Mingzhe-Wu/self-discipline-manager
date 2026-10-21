@@ -93,3 +93,8 @@ export function layoutOverlaps(ranges: readonly OverlapRange[], minimumMinutes =
     if (members.length) finishGroup();
     return layouts;
 }
+
+/** Keep the top anchored unless the expanded capsule would cross the visible bottom. */
+export function hoverExpansionOffset(top: number, height: number, expandedHeight: number, visibleBottom: number) {
+    return top + expandedHeight <= visibleBottom ? 0 : height - expandedHeight;
+}

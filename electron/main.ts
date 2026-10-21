@@ -5,10 +5,12 @@ import { registerTaskIpc } from "./ipc/taskIpc";
 import { createSenderValidator } from "./ipc/validateSender";
 import { startTaskScheduler, stopTaskScheduler } from "./scheduler/taskScheduler";
 
-import { getLocalPreferences, getUserSettings } from "./services/settingsService";
+import { getLocalPreferences, getUserSettings, updateUserSettings } from "./services/settingsService";
 import { registerSettingsIpc } from "./ipc/settingsIpc";
 import { defaultWindowBounds } from "./window/windowSizing";
 import { loadWindowGeometry, trackWindowGeometry } from "./window/windowGeometry";
+import { createMiniWindowController } from "./window/miniWindow";
+import { registerMiniIpc } from "./ipc/miniIpc";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -17,6 +19,30 @@ let fatalErrorReported = false;
 let rendererUrl: string;
 let startupComplete = false;
 let saveWindowGeometry: (() => void) | undefined;
+let mini: ReturnType<typeof createMiniWindowController> | null = null;
+
+function dataChanged() {
+    for (const window of [mainWindow, mini?.getWindow()]) {
+        try {
+            if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send("data:changed");
+        } catch (error) { console.error("Could not refresh application window", error); }
+    }
+}
+
+function settingsChanged() {
+    void mini?.applyPreference(getUserSettings().trayMiniEnabled).catch(error => console.error("Could not update mini window", error));
+    dataChanged();
+}
+
+async function toggleMini() {
+    if (!mini) return;
+    if (mini.isVisible()) { mini.hide(); return; }
+    if (!getUserSettings().trayMiniEnabled) {
+        updateUserSettings({ trayMiniEnabled: true }); dataChanged();
+    }
+    await mini.applyPreference(true);
+    await mini.show();
+}
 
 function showMainWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -66,15 +92,23 @@ async function createWindow() {
 function createTray() {
     tray = new Tray(path.join(app.getAppPath(), "resources", "tray-icon.png"));
     tray.setToolTip("Self Discipline Manager");
+    updateTrayMenu();
+    tray.on("double-click", showMainWindow);
+}
+
+function updateTrayMenu() {
+    if (!tray) return;
     tray.setContextMenu(Menu.buildFromTemplate([
-        { label: "Open", click: showMainWindow },
+        { label: "Open Self Discipline Manager", click: showMainWindow },
+        { id: "toggle-mini", label: mini?.isVisible() ? "Hide Today mini view" : "Show Today mini view", click: () => { void toggleMini().catch(error => console.error("Could not show mini window", error)); } },
+        { type: "separator" },
         { label: "Quit", click: () => app.quit() },
     ]));
-    tray.on("double-click", showMainWindow);
 }
 
 function cleanup() {
     stopTaskScheduler();
+    mini?.dispose(); mini = null;
     closeDatabase();
     tray?.destroy();
     tray = null;
@@ -121,14 +155,19 @@ if (!app.requestSingleInstanceLock()) {
             path.join(app.getAppPath(), "drizzle"),
         );
         getLocalPreferences();
+        const miniUrl = new URL("mini.html", rendererUrl).href;
+        mini = createMiniWindowController({ userData: app.getPath("userData"), rendererUrl: miniUrl,
+            preload: path.join(app.getAppPath(), "out", "preload", "mini.mjs"), onVisibilityChange: updateTrayMenu });
         const validateSender = createSenderValidator(() => mainWindow, rendererUrl);
-        registerTaskIpc(validateSender);
-        registerSettingsIpc(validateSender);
+        registerTaskIpc(validateSender, dataChanged);
+        registerSettingsIpc(validateSender, settingsChanged);
+        registerMiniIpc(createSenderValidator(() => mini?.getWindow() ?? null, miniUrl), { showBallMenu: mini.showBallMenu, openMain: showMainWindow, changed: dataChanged, getState: mini.getState, expand: mini.expand, collapse: mini.collapse, beginDrag: mini.beginDrag, moveDrag: mini.moveDrag, endDrag: mini.endDrag, beginResize: mini.beginResize, moveResize: mini.moveResize, endResize: mini.endResize, openTask: details => { showMainWindow(); mainWindow?.webContents.send("task:open-details", details); } });
         await createWindow();
         if (isQuitting) return;
         createTray();
         startTaskScheduler();
         startupComplete = true;
+        await mini.applyPreference(getUserSettings().trayMiniEnabled).catch(error => console.error("Could not restore mini window", error));
         app.on("activate", () => {
             if (!mainWindow) void createWindow().catch(reportFatalError);
             else showMainWindow();

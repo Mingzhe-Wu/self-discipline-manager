@@ -73,3 +73,11 @@ test('staggered cards expose every column, overlap their neighbors and fill the 
 test('minimum visual duration groups adjacent short cards without changing planned endpoints',()=>{
  const ranges=[range(1,540,545),range(2,545,550),range(3,550,555)];const before=structuredClone(ranges);assert.deepEqual(layoutOverlaps(ranges,15).map(r=>r.groupSize),[3,3,3]);assert.deepEqual(ranges,before);
 });
+
+test('hover expansion anchors downward and only flips upward when the visible bottom cannot fit it', () => {
+    const { hoverExpansionOffset } = require('../src/timetableLayout.ts');
+    assert.equal(hoverExpansionOffset(200, 20, 120, 600), 0);
+    assert.equal(hoverExpansionOffset(480, 20, 120, 600), 0);
+    assert.equal(hoverExpansionOffset(540, 20, 120, 600), -100);
+    assert.equal(hoverExpansionOffset(200, 180, 180, 600), 0);
+});

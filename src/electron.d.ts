@@ -1,10 +1,31 @@
+import type { MiniToday, MiniWindowState, MiniTaskDetails, MiniResizeEdge, MiniPointer } from "../shared/types/mini";
 import type { TaskDeletionReceipt, ResizeOccurrenceInput, OccurrenceTarget, UpdateOccurrenceTimesInput, UpdateOccurrencePlanInput, CreateTaskInput, Task, TaskOccurrence, WeekSchedule } from "../shared/types/task";
 import type { UpdateLocalPreferencesInput, LocalPreferences, LocalProfile, UpdateUserSettingsInput, UserSettings, PlanningHours } from "../shared/types/settings";
 export {};
 
 declare global {
     interface Window {
+        miniAPI: {
+            openTask: (target: OccurrenceTarget) => Promise<void>;
+            beginResize: (edge: MiniResizeEdge, pointer: MiniPointer) => Promise<void>;
+            moveResize: (pointer: MiniPointer) => Promise<void>;
+            endResize: () => Promise<void>;
+            getWindowState: () => Promise<MiniWindowState>;
+            expand: () => Promise<void>;
+            collapse: () => Promise<void>;
+            beginDrag: () => Promise<void>;
+            moveDrag: () => Promise<void>;
+            endDrag: () => Promise<void>;
+            onWindowStateChanged: (callback: (state: MiniWindowState) => void) => () => void;
+            getToday: () => Promise<MiniToday>;
+            start: (target: OccurrenceTarget) => Promise<TaskOccurrence>;
+            finish: (target: OccurrenceTarget) => Promise<TaskOccurrence>;
+            showBallMenu: () => Promise<void>;
+            openMain: () => Promise<void>;
+            onDataChanged: (callback: () => void) => () => void;
+        };
         electronAPI: {
+            onOpenTaskDetails: (callback: (details: MiniTaskDetails) => void) => () => void;
             updateLocalPreferences: (input: UpdateLocalPreferencesInput) => Promise<LocalPreferences>;
             getLocalPreferences: () => Promise<LocalPreferences>;
             updateLocalProfile: (input: { displayName: string }) => Promise<LocalProfile>;
@@ -14,6 +35,7 @@ declare global {
             resizeTaskOccurrence: (input: ResizeOccurrenceInput) => Promise<TaskOccurrence>;
             updateTaskOccurrencePlan: (input: UpdateOccurrencePlanInput) => Promise<Task>;
             onWindowShown: (callback: () => void) => () => void;
+            onDataChanged: (callback: () => void) => () => void;
             getMissedTasks: () => Promise<WeekSchedule>;
             lateStartTaskOccurrence: (input: OccurrenceTarget) => Promise<Task>;
             listTasks: () => Promise<Task[]>;

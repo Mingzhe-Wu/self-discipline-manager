@@ -1,9 +1,20 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { MiniTaskDetails } from "../shared/types/mini";
 import type { ResizeOccurrenceInput, OccurrenceTarget, UpdateOccurrenceTimesInput, UpdateOccurrencePlanInput, CreateTaskInput } from "../shared/types/task";
 
 import type { UpdateLocalPreferencesInput, UpdateUserSettingsInput, PlanningHours } from "../shared/types/settings";
 
 contextBridge.exposeInMainWorld("electronAPI", {
+    onOpenTaskDetails: (callback: (details: MiniTaskDetails) => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, details: MiniTaskDetails) => callback(details);
+        ipcRenderer.on("task:open-details", listener);
+        return () => ipcRenderer.removeListener("task:open-details", listener);
+    },
+    onDataChanged: (callback: () => void) => {
+        const listener = () => callback();
+        ipcRenderer.on("data:changed", listener);
+        return () => ipcRenderer.removeListener("data:changed", listener);
+    },
     updateLocalPreferences: (input: UpdateLocalPreferencesInput) => ipcRenderer.invoke("settings:update-local-preferences", input),
     getLocalPreferences: () => ipcRenderer.invoke("settings:local-preferences"),
     updateLocalProfile: (input: { displayName: string }) => ipcRenderer.invoke("settings:update-profile", input),
