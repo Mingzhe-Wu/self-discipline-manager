@@ -1,6 +1,6 @@
 # Task schedules and occurrence history
 
-A Task is the only top-level item. Each scheduled occurrence has its own planned → in-progress → completed lifecycle. Notifications belong to that occurrence's schedule.
+A Task is the only top-level item. Each scheduled occurrence has its own Planned → In Progress → Finished lifecycle, or becomes Missed after its planned end without an actual start. Notifications belong to that occurrence's schedule.
 
 ## Stored model and actual activity
 
@@ -19,11 +19,11 @@ A Task is the only top-level item. Each scheduled occurrence has its own planned
 | `remindersSuppressed` | Preserves imported alert suppression independently of progress. |
 | `createdAt` | Row materialization time, not activity time. |
 
-`shared/occurrenceLifecycle.ts` is authoritative: `endedAt != null` or `legacyCompleted` means completed; otherwise a known start means in-progress; otherwise planned. `occurrenceDuration` derives `endedAt - startedAt` only when both exist. Unknown start/end means unknown duration; duration is never stored or fabricated.
+`shared/occurrenceLifecycle.ts` is authoritative: `endedAt != null` or `legacyCompleted` means completed; otherwise a known start means in-progress; otherwise `now > scheduledEndAt` means missed, and all remaining records are planned. `occurrenceDuration` derives `endedAt - startedAt` only when both exist. Unknown start/end means unknown duration; duration is never stored or fabricated.
 
-Start records now, End requires a start and records now. Repeated Start or End preserves existing times. Changes affect only the selected occurrence. History accepts nullable actual start/end, rejects an end without a start and rejects end before start. Saving both null deliberately returns the record to planned while preserving its first `recordedAt`. A later Start still preserves that first entry. These are editable current records, not an immutable audit log.
+Start records now, End requires a start and records now. Repeated Start or End preserves existing times. Changes affect only the selected occurrence. History accepts nullable actual start/end, rejects an end without a start and rejects end before start. Clearing both actual times preserves first `recordedAt` and derives Planned or Missed from the current clock. An already-Missed record cannot use the normal reset path. A later Start still preserves that first entry. These are editable current records, not an immutable audit log.
 
-The bridge exposes `startTaskOccurrence`, `endTaskOccurrence` and `updateTaskOccurrenceTimes`. Targets contain `taskId` plus either `occurrenceId` or both `scheduledStartAt` and `scheduledEndAt`; time updates add nullable `startedAt` and `endedAt`. There is no completion toggle API.
+The bridge exposes `startTaskOccurrence`, `endTaskOccurrence`, `updateTaskOccurrenceTimes`, `getMissedTasks` and `lateStartTaskOccurrence`. Targets contain `taskId` plus either `occurrenceId` or both `scheduledStartAt` and `scheduledEndAt`; time updates add nullable `startedAt` and `endedAt`. There is no completion toggle API.
 
 ## Calendar recurrence and weekly projection
 
@@ -96,6 +96,10 @@ A changed recurring Actual value atomically inserts an exact planned-range exclu
 
 Week queries include stored actual ranges intersecting the requested week even when their original planned dates lie elsewhere. These candidates still must match the current recurrence/effective boundary and exclusions; obsolete-rule history never becomes active cards. Renderer splitting is limited to the viewed week, so a long-running occurrence does not generate an unbounded off-screen set of segments. Details still displays both planned and actual, and the existing fifteen-minute minimum visible card height remains.
 
-**Manage recurring tasks** lists only recurring definitions and opens the shared TaskForm to edit the series itself, with Save Task / Cancel returning to the list. It does not open the first occurrence’s Details. Ordinary and detached one-time tasks open Details from their timetable cards. Per-occurrence statistics remain derived from four timestamps, with no new stored statistics or reports.
+**Task Center** defaults to all Tasks and individual missed occurrences. Its exclusive Recurring/Missed chips filter the list; repeating the selected chip clears it. A recurring series row opens the shared TaskForm to edit the series itself, with Save Task / Cancel returning to Task Center. It does not open the first occurrence’s Details. Ordinary and detached one-time tasks open Details from their timetable cards. Per-occurrence statistics remain derived from four timestamps, with no new stored statistics or reports.
 
 Task Details has an information card with Edit at its bottom right, a separate Timing summary card, then Planned vs Actual. The timeline card has two layers: a shared-scale, read-only Planned bar and draggable Actual endpoints above; exact Actual start/end selectors, help and Clear actual times below a light divider. Dragging updates temporary preview and selectors together, then saves on release. Selecting a time updates the timeline immediately. Held-edge extension stays within the endpoint’s local day, 00:00–23:55. The History disclosure is temporarily hidden without deleting historical data.
+
+## Missed workflow and display preferences
+
+See [Missed workflow](missed-workflow.md) for precedence, today-only explicit Late Start, preserved originals, reminder cutoff and the recent-first Missed entry. Wake/Sleep are display preferences only: creation/editing can fall outside them, and the timetable expands without rewriting times. No schema or linkage fields were added.

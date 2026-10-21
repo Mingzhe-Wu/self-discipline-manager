@@ -20,7 +20,7 @@ test('planning settings validate five-minute same-day boundaries and full-day de
     assert.deepEqual(validatePlanningHours(hours), hours);
     for (const value of [null, {}, { wakeTime: '24:00', sleepTime: '24:00' }, { wakeTime: '08:03', sleepTime: '22:00' }, { wakeTime: '08:00', sleepTime: '22:01' }, { wakeTime: '08:00', sleepTime: '08:00' }, { wakeTime: '23:00', sleepTime: '07:00' }]) assert.throws(() => validatePlanningHours(value));
     assert.doesNotThrow(() => assertPlanningRange(Date.parse('2026-10-20T15:00Z'), Date.parse('2026-10-20T16:00Z'), 'America/Los_Angeles', hours));
-    assert.throws(() => assertPlanningRange(Date.parse('2026-10-20T14:55Z'), Date.parse('2026-10-20T16:00Z'), 'America/Los_Angeles', hours), /planning|wake|sleep/i);
+    assert.doesNotThrow(() => assertPlanningRange(Date.parse('2026-10-20T14:55Z'), Date.parse('2026-10-20T16:00Z'), 'America/Los_Angeles', hours));
     assert.doesNotThrow(() => assertPlanningRange(Date.parse('2026-10-20T23:00Z'), Date.parse('2026-10-21T00:00Z'), 'UTC', { wakeTime: '00:00', sleepTime: '24:00' }));
 });
 
@@ -34,15 +34,15 @@ test('planning settings persist across database restart as a singleton', () => {
         settings.updatePlanningHours({ ...hours, sleepTime: '23:00' });
         database.closeDatabase(); database.initializeDatabase(file, path.resolve('drizzle'));
         assert.deepEqual(settings.getPlanningHours(), { ...hours, sleepTime: '23:00' });
-        assert.equal(database.getDatabase().$client.prepare('SELECT count(*) AS count FROM planning_settings').get().count, 1);
+        assert.equal(database.getDatabase().$client.prepare('SELECT count(*) AS count FROM user_settings').get().count, 1);
     } finally { database.closeDatabase(); fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('settings reject and name every future conflict including disabled recurring notifications', () => {
+test('display settings allow existing future tasks including disabled recurring notifications', () => {
     single('Early appointment', '2026-10-21T07:00Z', '2026-10-21T08:00Z');
     tasks.createTask({ title: 'Late practice', enabled: false, scheduleType: 'recurring', recurrenceRule: { frequency: 'weekly', startDate: '2027-10-20', startTime: '22:00', endTime: '23:00', timeZone: 'Pacific/Auckland', weekdays: [1] } });
-    assert.throws(() => settings.updatePlanningHours(hours), (error) => error.message.includes('Early appointment') && error.message.includes('Late practice'));
-    assert.deepEqual(settings.getPlanningHours(), { wakeTime: '00:00', sleepTime: '24:00' });
+    assert.deepEqual(settings.updatePlanningHours(hours), hours);
+    assert.deepEqual(settings.getPlanningHours(), hours);
 });
 
 test('past and completed one-time history allows narrowing without rewriting actual timestamps', () => {
@@ -56,9 +56,9 @@ test('past and completed one-time history allows narrowing without rewriting act
     assert.equal(loaded.find((task) => task.id === completed.id).currentOccurrence.endedAt, actual.endedAt);
 });
 
-test('current unfinished one-time tasks conflict using their saved zone', () => {
+test('display preferences do not constrain current unfinished tasks in other zones', () => {
     single('Ongoing in Los Angeles', '2026-10-20T07:30Z', '2026-10-20T08:30Z', 'America/Los_Angeles');
-    assert.throws(() => settings.updatePlanningHours(hours), /Ongoing in Los Angeles/);
+    assert.doesNotThrow(() => settings.updatePlanningHours(hours));
 });
 
 test('invalid settings leave the saved value untouched', () => {
@@ -67,11 +67,11 @@ test('invalid settings leave the saved value untouched', () => {
     assert.deepEqual(settings.getPlanningHours(), hours);
 });
 
-test('a finite recurring exclusion cannot hide later seasonal planning conflicts', () => {
+test('display preferences do not impose seasonal constraints on recurring tasks', () => {
     const task = tasks.createTask({ title: 'Seasonal practice', scheduleType: 'recurring', recurrenceRule: { frequency: 'daily', startDate: '2026-10-20', startTime: '01:30', endTime: '02:30', timeZone: 'America/Los_Angeles', weekdays: [] } });
     database.getDatabase().$client.prepare('INSERT INTO recurrence_exclusions (task_id,scheduled_start_at,scheduled_end_at,created_at) VALUES (?,?,?,?)')
         .run(task.id, Date.parse('2027-03-14T09:30Z'), Date.parse('2027-03-14T10:30Z'), now);
-    assert.throws(() => settings.updatePlanningHours({ wakeTime: '01:00', sleepTime: '03:00' }), /Seasonal practice/);
+    assert.doesNotThrow(() => settings.updatePlanningHours({ wakeTime: '01:00', sleepTime: '03:00' }));
 });
 
 test('settings narrow around unchanged unaligned legacy schedules without rewriting history', () => {
@@ -88,20 +88,20 @@ test('settings narrow around unchanged unaligned legacy schedules without rewrit
     assert.deepEqual(settings.updatePlanningHours(hours), hours);
     assert.deepEqual(sql.prepare('SELECT * FROM tasks ORDER BY id').all(), beforeTasks);
     assert.deepEqual(sql.prepare('SELECT * FROM task_occurrences ORDER BY id').all(), beforeOccurrences);
-    assert.throws(() => settings.updatePlanningHours({ wakeTime: '09:05', sleepTime: '22:00' }), /Legacy recurring/);
-    assert.throws(() => settings.updatePlanningHours({ wakeTime: '08:00', sleepTime: '11:00' }), /Legacy precise/);
-    assert.deepEqual(settings.getPlanningHours(), hours);
+    assert.doesNotThrow(() => settings.updatePlanningHours({ wakeTime: '09:05', sleepTime: '22:00' }));
+    assert.doesNotThrow(() => settings.updatePlanningHours({ wakeTime: '08:00', sleepTime: '11:00' }));
+    assert.deepEqual(settings.getPlanningHours(), { wakeTime: '08:00', sleepTime: '11:00' });
 });
 
-test('new recurring plans reject seasonal wall ranges outside the saved planning hours', () => {
+test('new recurring plans allow seasonal wall ranges outside preferred display hours', () => {
     settings.updatePlanningHours({ wakeTime: '01:00', sleepTime: '03:00' });
-    assert.throws(() => tasks.createTask({ title: 'Seasonal create', scheduleType: 'recurring', recurrenceRule: {
+    assert.doesNotThrow(() => tasks.createTask({ title: 'Seasonal create', scheduleType: 'recurring', recurrenceRule: {
         frequency: 'daily', startDate: '2026-10-20', startTime: '01:30', endTime: '02:30', timeZone: 'America/Los_Angeles', weekdays: [],
-    } }), /planning.*Seasonal create|Seasonal create.*planning/i);
-    assert.equal(tasks.getAllTasks().length, 0);
+    } }));
+    assert.equal(tasks.getAllTasks().length, 1);
 });
 
-test('changed recurring plans check beyond exclusions and preserve all history on seasonal rejection', () => {
+test('changing recurrence outside preferred hours preserves existing actual history and exclusions', () => {
     settings.updatePlanningHours({ wakeTime: '01:00', sleepTime: '03:00' });
     const input = { title: 'Seasonal update', scheduleType: 'recurring', recurrenceRule: {
         frequency: 'daily', startDate: '2026-10-20', startTime: '01:30', endTime: '02:00', timeZone: 'America/Los_Angeles', weekdays: [],
@@ -112,8 +112,7 @@ test('changed recurring plans check beyond exclusions and preserve all history o
     sql.prepare('INSERT INTO recurrence_exclusions (task_id,scheduled_start_at,scheduled_end_at,created_at) VALUES (?,?,?,?)')
         .run(task.id, Date.parse('2027-03-14T09:30Z'), Date.parse('2027-03-14T10:30Z'), now);
     const before = { tasks: sql.prepare('SELECT * FROM tasks').all(), occurrences: sql.prepare('SELECT * FROM task_occurrences').all(), exclusions: sql.prepare('SELECT * FROM recurrence_exclusions').all() };
-    assert.throws(() => tasks.updateTask(task.id, { ...input, recurrenceRule: { ...input.recurrenceRule, endTime: '02:30' } }), /planning.*Seasonal update|Seasonal update.*planning/i);
-    assert.deepEqual(sql.prepare('SELECT * FROM tasks').all(), before.tasks);
-    assert.deepEqual(sql.prepare('SELECT * FROM task_occurrences').all(), before.occurrences);
+    assert.doesNotThrow(() => tasks.updateTask(task.id, { ...input, recurrenceRule: { ...input.recurrenceRule, endTime: '02:30' } }));
+    for (const row of before.occurrences.filter(row => row.recorded_at != null)) assert.deepEqual(sql.prepare('SELECT * FROM task_occurrences WHERE id=?').get(row.id), row);
     assert.deepEqual(sql.prepare('SELECT * FROM recurrence_exclusions').all(), before.exclusions);
 });

@@ -1,9 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { ResizeOccurrenceInput, OccurrenceTarget, UpdateOccurrenceTimesInput, UpdateOccurrencePlanInput, CreateTaskInput } from "../shared/types/task";
 
-import type { PlanningHours } from "../shared/types/settings";
+import type { UpdateLocalPreferencesInput, UpdateUserSettingsInput, PlanningHours } from "../shared/types/settings";
 
 contextBridge.exposeInMainWorld("electronAPI", {
+    updateLocalPreferences: (input: UpdateLocalPreferencesInput) => ipcRenderer.invoke("settings:update-local-preferences", input),
+    getLocalPreferences: () => ipcRenderer.invoke("settings:local-preferences"),
+    updateLocalProfile: (input: { displayName: string }) => ipcRenderer.invoke("settings:update-profile", input),
+    updateUserSettings: (input: UpdateUserSettingsInput) => ipcRenderer.invoke("settings:update", input),
     getPlanningHours: () => ipcRenderer.invoke("settings:planning-hours"),
     updatePlanningHours: (input: PlanningHours) => ipcRenderer.invoke("settings:update-planning-hours", input),
     resizeTaskOccurrence: (input: ResizeOccurrenceInput) => ipcRenderer.invoke("task:resize-occurrence", input),
@@ -13,6 +17,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
         ipcRenderer.on("app:shown", listener);
         return () => ipcRenderer.removeListener("app:shown", listener);
     },
+    getMissedTasks: () => ipcRenderer.invoke("task:missed"),
+    lateStartTaskOccurrence: (input: OccurrenceTarget) => ipcRenderer.invoke("task:late-start", input),
     listTasks: () => ipcRenderer.invoke("task:list"),
     createTask: (input: CreateTaskInput) => ipcRenderer.invoke("task:create", input),
     updateTask: (id: number, input: CreateTaskInput) => ipcRenderer.invoke("task:update", id, input),

@@ -5,6 +5,7 @@ import { registerTaskIpc } from "./ipc/taskIpc";
 import { createSenderValidator } from "./ipc/validateSender";
 import { startTaskScheduler, stopTaskScheduler } from "./scheduler/taskScheduler";
 
+import { getLocalPreferences, getUserSettings } from "./services/settingsService";
 import { registerSettingsIpc } from "./ipc/settingsIpc";
 import { defaultWindowBounds } from "./window/windowSizing";
 import { loadWindowGeometry, trackWindowGeometry } from "./window/windowGeometry";
@@ -52,7 +53,8 @@ async function createWindow() {
     window.on("close", (event) => {
         if (!isQuitting) {
             event.preventDefault();
-            window.hide();
+            if (getUserSettings().closeToTray) window.hide();
+            else app.quit();
         }
     });
     window.on("closed", () => {
@@ -118,6 +120,7 @@ if (!app.requestSingleInstanceLock()) {
             path.join(app.getPath("userData"), "data.db"),
             path.join(app.getAppPath(), "drizzle"),
         );
+        getLocalPreferences();
         const validateSender = createSenderValidator(() => mainWindow, rendererUrl);
         registerTaskIpc(validateSender);
         registerSettingsIpc(validateSender);

@@ -63,7 +63,7 @@ export interface ResizeOccurrenceInput {
     target: OccurrenceTarget;
     edge: "start" | "end";
     at: number;
-    expectedState: "planned" | "in-progress" | "completed";
+    expectedState: "planned" | "in-progress" | "completed" | "missed";
 }
 
 export interface ScheduledOccurrence {

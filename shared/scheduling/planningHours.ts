@@ -28,10 +28,9 @@ export function assertPlanningRange(start: number, end: number, timeZone: string
     assertPlanningBounds(start, end, timeZone, hours);
 }
 
-/** Existing imported schedules keep their precise wall times. Settings only
- * check containment; five-minute alignment applies to newly saved ranges. */
+/** Validate positive same-day ranges. Wake/Sleep are display preferences only. */
 export function assertPlanningBounds(start: number, end: number, timeZone: string, hours: PlanningHours): void {
-    const normalized = validatePlanningHours(hours);
+    validatePlanningHours(hours);
     const a = Temporal.Instant.fromEpochMilliseconds(start).toZonedDateTimeISO(timeZone);
     const b = Temporal.Instant.fromEpochMilliseconds(end).toZonedDateTimeISO(timeZone);
     const endAtMidnight = b.hour === 0 && b.minute === 0 && b.second === 0 && b.millisecond === 0 && b.toPlainDate().equals(a.toPlainDate().add({ days: 1 }));
@@ -39,8 +38,5 @@ export function assertPlanningBounds(start: number, end: number, timeZone: strin
     const endMinute = endAtMidnight ? 1440 : b.hour * 60 + b.minute + b.second / 60 + b.millisecond / 60000;
     if (end <= start || (!a.toPlainDate().equals(b.toPlainDate()) && !endAtMidnight) || endMinute <= startMinute) {
         throw new Error("Planned range must end later within the same planning day");
-    }
-    if (startMinute < clockMinutes(normalized.wakeTime, false) || endMinute > clockMinutes(normalized.sleepTime, true)) {
-        throw new Error(`Planned range must fit planning hours ${normalized.wakeTime}–${normalized.sleepTime} in ${timeZone}`);
     }
 }

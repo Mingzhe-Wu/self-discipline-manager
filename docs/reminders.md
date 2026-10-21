@@ -42,3 +42,11 @@ The single-instance main process owns the scheduler. Window close hides to tray;
 Migration `0004_occurrence_lifecycle.sql` maps an old sent flag to all seven slots as sent, retaining a known old notification time or null. Old suppressed flags stay suppressed; pending flags are subject only to current windows. These delivery records never imply activity completion.
 
 Migration `0005_planned_ranges.sql` preserves every reminder-slot row and its occurrence ID while adding planned ranges. End-only schedule edits preserve meaningful old-range history, and those retained old ranges are excluded from current-rule delivery.
+
+## Missed cutoff
+
+An occurrence with no actual start becomes Missed strictly after its planned end. Both due selection and pre-delivery checks reject it then, even if a start-reminder slot would otherwise remain eligible. Existing successful slot history stays intact. Today-only Late Start creates an independent already-running one-time Task without copying slots; the original stays quiet. See [Missed workflow](missed-workflow.md).
+
+## Global notification preference
+
+Settings Service supplies a persisted notificationsEnabled master switch and internal resume timestamp. Both due selection and pre-delivery relevance honor them without changing Task flags or successful slot records. Re-enabling allows only reminder targets at/after the enable time, so elapsed disabled-period slots are not replayed, including after restart. See [Local Profile and Settings](local-profile-settings.md).

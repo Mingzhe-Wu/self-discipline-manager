@@ -8,7 +8,7 @@ const database = require('../electron/db/database.ts');
 const service = require('../electron/services/taskService.ts');
 const createBeforeStart = require('./create-before-start.cjs');
 const { occurrenceState, occurrenceDuration } = require('../shared/occurrenceLifecycle.ts');
-const finish = (target) => { service.startOccurrence(target); return service.endOccurrence(target); };
+const finish = (target) => service.updateOccurrenceTimes({ ...target, startedAt: Date.now(), endedAt: Date.now() });
 const now = Date.parse('2026-10-19T18:00Z');
 const from = Date.parse('2026-10-19T00:00Z');
 const to = Date.parse('2026-10-26T00:00Z');
@@ -212,7 +212,7 @@ for (const kind of ['one-time', 'recurring']) {
         const WeekSchedule = require('../src/components/WeekSchedule.tsx').default;
         const task = createBeforeStart(service, kind === 'one-time'
             ? { title: 'Lifecycle task', scheduleType: 'one-time', scheduledStartAt: now - 5 * 60000, scheduledEndAt: now + 25 * 60000 }
-            : { ...daily(), title: 'Lifecycle task' });
+            : { ...daily({ startTime: '18:00', endTime: '18:30' }), title: 'Lifecycle task' });
         const scheduledStartAt = task.currentOccurrence.scheduledStartAt;
         const target = { taskId: task.id, scheduledStartAt, scheduledEndAt: scheduledStartAt + 30 * 60000 };
         const originalHistory = service.listOccurrences(task.id, from - 2 * 86400000, to);

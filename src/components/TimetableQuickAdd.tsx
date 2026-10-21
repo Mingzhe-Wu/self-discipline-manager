@@ -12,9 +12,9 @@ interface QuickAddVisual {
 }
 
 /** Keep pointer-following state separate from the timetable cards. */
-export default function TimetableQuickAdd({ board, density, origin, hours, enabled, onCreate }: {
+export default function TimetableQuickAdd({ board, density, origin, hours, defaultDurationMinutes = 60, enabled, onCreate }: {
     board: RefObject<HTMLDivElement | null>; density: number; origin: number;
-    hours: PlanningHours; enabled: boolean; onCreate: (draft: QuickAddDraft) => void;
+    hours: PlanningHours; defaultDurationMinutes?: number; enabled: boolean; onCreate: (draft: QuickAddDraft) => void;
 }) {
     const [hint, setHint] = useState<{ x: number; y: number; text: string } | null>(null);
     const [visual, setVisual] = useState<QuickAddVisual | null>(null);
@@ -39,7 +39,7 @@ export default function TimetableQuickAdd({ board, density, origin, hours, enabl
         function draftAt(x: number, y: number) {
             const timeline = timelineAt(x, y);
             const date = timeline?.closest<HTMLElement>(".day-column")?.dataset.date;
-            return timeline && date ? quickAddDraft(date, y - timeline.getBoundingClientRect().top, density, origin, bounds) : null;
+            return timeline && date ? quickAddDraft(date, y - timeline.getBoundingClientRect().top, density, origin, bounds, defaultDurationMinutes) : null;
         }
         function refreshHint() {
             if (selection && !selection.timeline.isConnected) selection = null;
@@ -49,10 +49,12 @@ export default function TimetableQuickAdd({ board, density, origin, hours, enabl
             if (ctrl && !opened) {
                 const at = pointer ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
                 const target = document.elementFromPoint(at.x, at.y);
+                const missed = target?.closest<HTMLElement>(".occurrence-card")?.dataset.state === "missed";
                 const edge = target?.closest<HTMLButtonElement>(".timetable-resize-handle");
                 const field = edge?.getAttribute("aria-label")?.replace(/^Drag /, "").split(" for ")[0];
                 const text = draggingEdge ? `Release to save · Right-click to cancel`
                     : selection ? "Click to confirm end time · Right-click to cancel"
+                    : missed ? "Open Details to correct this missed task's actual times"
                     : field ? `Hold and drag to adjust task time`
                     : target?.closest(".occurrence-card") ? "Drag the top or bottom edge to adjust task time"
                     : draft ? "Click to set start time · Double-click for quick setup"
@@ -185,7 +187,7 @@ export default function TimetableQuickAdd({ board, density, origin, hours, enabl
             element.removeEventListener("dblclick", doubleClick);
             element.classList.remove("is-quick-add");
         };
-    }, [board, density, origin, wakeTime, sleepTime, enabled, onCreate]);
+    }, [board, density, origin, wakeTime, sleepTime, defaultDurationMinutes, enabled, onCreate]);
     return enabled ? <>
         {visual && <div className="quick-add-visual" aria-hidden="true" style={{ left: visual.left, top: visual.top, width: visual.width, height: visual.height }}>
             {visual.guide && <>

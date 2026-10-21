@@ -1,15 +1,25 @@
 import { eq } from "drizzle-orm";
-import type { PlanningHours } from "../../shared/types/settings";
+import type { UserSettings } from "../../shared/types/settings";
 import { getDatabase } from "./database";
-import { planningSettingsTable } from "./schema";
+import { localProfilesTable, userSettingsTable } from "./schema";
 
-export function getPlanningHours(): PlanningHours | undefined {
-    const row = getDatabase().select().from(planningSettingsTable).where(eq(planningSettingsTable.id, 1)).get();
-    return row ? { wakeTime: row.wakeTime, sleepTime: row.sleepTime } : undefined;
+export function ensureDefaults(now: number): void {
+    const db = getDatabase();
+    db.insert(userSettingsTable).values({ id: 1 }).onConflictDoNothing().run();
+    db.insert(localProfilesTable).values({ id: 1, createdAt: now, updatedAt: now }).onConflictDoNothing().run();
+}
+export function getSettings() { return getDatabase().select().from(userSettingsTable).where(eq(userSettingsTable.id, 1)).get(); }
+export function getProfile() { return getDatabase().select().from(localProfilesTable).where(eq(localProfilesTable.id, 1)).get(); }
+export function saveSettings(settings: UserSettings, notificationsResumeAt: number): void {
+    getDatabase().update(userSettingsTable).set({ ...settings, notificationsResumeAt }).where(eq(userSettingsTable.id, 1)).run();
+}
+export function saveProfile(displayName: string, now: number) {
+    return getDatabase().update(localProfilesTable).set({ displayName, updatedAt: now }).where(eq(localProfilesTable.id, 1)).returning().get();
 }
 
-export function savePlanningHours(hours: PlanningHours): PlanningHours {
-    getDatabase().insert(planningSettingsTable).values({ id: 1, ...hours })
-        .onConflictDoUpdate({ target: planningSettingsTable.id, set: hours }).run();
-    return { ...hours };
+export function savePreferences(displayName: string, settings: UserSettings, notificationsResumeAt: number, now: number) {
+    getDatabase().transaction(() => {
+        saveProfile(displayName, now);
+        saveSettings(settings, notificationsResumeAt);
+    });
 }

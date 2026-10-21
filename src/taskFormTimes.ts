@@ -2,7 +2,7 @@ const minutes = (time: string) => { const [hour, minute] = time.split(':').map(N
 const clock = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
 
 /** Preserve an overflowing hour so the form can reject it instead of wrapping to tomorrow. */
-export function defaultEndTime(start: string): string { return clock(minutes(start) + 60); }
+export function defaultEndTime(start: string, durationMinutes = 60): string { return clock(minutes(start) + durationMinutes); }
 
 export function moveStartTime(start: string, end: string, nextStart: string, manuallyEditedEnd: boolean): string {
     if (end === '') return '';

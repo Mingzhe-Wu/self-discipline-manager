@@ -61,7 +61,7 @@ test('0007 adds only category=other to legacy recurring/one-time rows and is res
   sql.prepare("INSERT INTO task_occurrences(id,task_id,scheduled_start_at,scheduled_end_at,started_at,ended_at,recorded_at,progress_source,created_at,updated_at) VALUES(1,1,?,?,?, ?,?,'corrected',1,2)").run(now,now+1800000,now-12345,now+1900123,now+86400000);
   sql.prepare("INSERT INTO occurrence_reminder_slots(occurrence_id,slot,state,sent_at) VALUES(1,0,'sent',123)").run();
   sql.prepare('INSERT INTO recurrence_exclusions(task_id,scheduled_start_at,scheduled_end_at,created_at) VALUES(2,?,?,1)').run(now+86400000,now+90000000);
-  const tables=['tasks','task_occurrences','occurrence_reminder_slots','recurrence_exclusions','planning_settings'];
+  const tables=['tasks','task_occurrences','occurrence_reminder_slots','recurrence_exclusions'];
   const before=Object.fromEntries(tables.map(t=>[t,sql.prepare('SELECT * FROM '+t+' ORDER BY id').all()]));
   database.closeDatabase();database.initializeDatabase(file,path.resolve('drizzle'));
   for(const t of tables){const after=database.getDatabase().$client.prepare('SELECT * FROM '+t+' ORDER BY id').all();if(t==='tasks')for(const row of after){assert.equal(row.category,'other');delete row.category;}assert.deepEqual(after,before[t],t);}

@@ -1,5 +1,6 @@
 import { TASK_CATEGORY_KEYS } from "../../shared/taskCategories";
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import type { RecurrenceRule } from "../../shared/types/task";
 
 export const tasksTable = sqliteTable("tasks", {
@@ -56,8 +57,22 @@ export const recurrenceExclusionsTable = sqliteTable("recurrence_exclusions", {
     createdAt: integer("created_at").notNull(),
 }, (table) => [uniqueIndex("recurrence_exclusions_task_range_unique").on(table.taskId, table.scheduledStartAt, table.scheduledEndAt)]);
 
-export const planningSettingsTable = sqliteTable("planning_settings", {
+export const userSettingsTable = sqliteTable("user_settings", {
     id: integer("id").primaryKey(),
     wakeTime: text("wake_time").notNull().default("00:00"),
     sleepTime: text("sleep_time").notNull().default("24:00"),
-});
+    defaultTaskDurationMinutes: integer("default_task_duration_minutes").notNull().default(60),
+    weekStartsOn: integer("week_starts_on").$type<0 | 1>().notNull().default(1),
+    notificationsEnabled: integer("notifications_enabled", { mode: "boolean" }).notNull().default(true),
+    trayMiniEnabled: integer("tray_mini_enabled", { mode: "boolean" }).notNull().default(false),
+    closeToTray: integer("close_to_tray", { mode: "boolean" }).notNull().default(true),
+    /** Delivery watermark, internal only: never replay slots that elapsed while disabled. */
+    notificationsResumeAt: integer("notifications_resume_at").notNull().default(0),
+}, table => [check("user_settings_singleton", sql`${table.id} = 1`)]);
+
+export const localProfilesTable = sqliteTable("local_profiles", {
+    id: integer("id").primaryKey(),
+    displayName: text("display_name").notNull().default("Local User"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+}, table => [check("local_profiles_singleton", sql`${table.id} = 1`)]);

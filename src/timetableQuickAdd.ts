@@ -5,21 +5,23 @@ const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.sl
 const clock = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 
 /** Offset is relative to the timeline itself; scrolling needs no extra correction. */
-export function quickAddDraft(date: string, offsetPixels: number, density: number, origin: number, hours: PlanningHours): QuickAddDraft | null {
+export function quickAddDraft(date: string, offsetPixels: number, density: number, origin: number, hours: PlanningHours, defaultDurationMinutes = 60): QuickAddDraft | null {
     if (!Number.isFinite(offsetPixels) || !Number.isFinite(density) || density <= 0) return null;
     const minute = origin + offsetPixels / density;
-    const wake = minutes(hours.wakeTime);
+    const wake = 0;
+    void hours;
     // The existing same-day form offers end times through 23:55.
-    const latestEnd = Math.min(minutes(hours.sleepTime), 1435);
+    const latestEnd = 1435;
     if (minute < wake || minute >= latestEnd) return null;
     const start = Math.round(minute / 5) * 5;
     if (start < wake || start >= latestEnd) return null;
-    return { date, startTime: clock(start), endTime: clock(Math.min(start + 60, latestEnd)) };
+    return { date, startTime: clock(start), endTime: clock(Math.min(start + defaultDurationMinutes, latestEnd)) };
 }
 
 /** Preview a second-click same-day range, never an inverted/zero duration. */
 export function quickAddSelection(draft: QuickAddDraft, offsetPixels: number, density: number, origin: number, hours: PlanningHours): QuickAddDraft {
+    void hours;
     const start = minutes(draft.startTime);
-    const end = Math.max(start + 5, Math.min(Math.min(minutes(hours.sleepTime), 1435), Math.round((origin + offsetPixels / density) / 5) * 5));
+    const end = Math.max(start + 5, Math.min(1435, Math.round((origin + offsetPixels / density) / 5) * 5));
     return { ...draft, endTime: clock(end) };
 }

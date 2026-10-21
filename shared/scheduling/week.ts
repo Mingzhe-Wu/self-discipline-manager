@@ -22,10 +22,10 @@ export function dayKey(timestamp: number, timeZone: string): string {
     return localDate(timestamp, timeZone).toString();
 }
 
-export function weekRange(timestamp: number, timeZone: string) {
+export function weekRange(timestamp: number, timeZone: string, weekStartsOn: 0 | 1 = 1) {
     const date = localDate(timestamp, timeZone);
-    const monday = date.subtract({ days: date.dayOfWeek - 1 });
-    return { from: midnight(monday, timeZone), to: midnight(monday.add({ days: 7 }), timeZone) };
+    const first = date.subtract({ days: (date.dayOfWeek - weekStartsOn + 7) % 7 });
+    return { from: midnight(first, timeZone), to: midnight(first.add({ days: 7 }), timeZone) };
 }
 
 export function shiftWeek(timestamp: number, direction: number, timeZone: string): number {
@@ -33,9 +33,9 @@ export function shiftWeek(timestamp: number, direction: number, timeZone: string
 }
 
 export function weekDays(from: number, timeZone: string) {
-    const monday = localDate(from, timeZone);
+    const first = localDate(from, timeZone);
     return Array.from({ length: 7 }, (_, index) => {
-        const date = monday.add({ days: index });
+        const date = first.add({ days: index });
         return { date: date.toString(), at: midnight(date, timeZone) };
     });
 }

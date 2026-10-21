@@ -1,5 +1,7 @@
 # Planning hours and occurrence editing
 
+> Historical implementation notes below. Current policy: Wake/Sleep are display preferences, never save constraints; the timetable targets eight visible hours and uses lifecycle-based actual geometry. The current Missed/Late Start behavior and exceptions are documented in [Missed workflow](missed-workflow.md).
+
 The existing renderer → preload → validated IPC → service → repository → Drizzle → SQLite boundary remains intact. No Missed/overdue workflow or cloud features were added.
 
 ## Planning hours
@@ -41,3 +43,5 @@ Historical verification for the original planning extension:103 automated tests,
 UI files changed: App.tsx; components/WeekSchedule, TaskForm, TaskDetails, TaskHistory, Dialog; new components/PlanningSettings; index.css; new taskFormTimes.ts and timetableViewport.ts. Backend files: schema +0006SQL/snapshot/journal, taskRepository/taskService, reminderService, scheduling/week, new settings types/pure validators/repository/service/IPC, preload/electron.d.ts, main/windowSizing. New tests: planning-settings, occurrence-planning, task-form-times, timetable-viewport, windows-planning; existing security/lifecycle/migration and installed GUI tests updated.
 
 Current follow-up verification: 114 automated tests, TypeScript, ESLint and production build, plus isolated category UI/restart checks. Task categories and migration0007 are documented in [task categories](task-categories.md). Timetable cards now use a fifteen-minute visual minimum, group width 1.05 / count and centered hover expansion; saved planned/actual times remain unchanged.
+
+Current storage/UI: migration 0008 consolidates the singleton planning_settings row into user_settings with the Wake/Sleep values preserved. The top toolbar now opens Settings; its Schedule section replaces the old independent Planning hours form. See [Local Profile and Settings](local-profile-settings.md).

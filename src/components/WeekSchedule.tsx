@@ -38,9 +38,10 @@ function OccurrenceCard({ task, segment, overlap, onChange, onSelect, onRequestR
     const category = categoryMetadata(task.category);
     const categoryDescription = `${category.label} category, ${task.title}`;
     const occurrence = segment.occurrence;
-    const resize = useOccurrenceResize({ task, occurrence, enabled: suppressHover && !busy, density, origin, timeZone, onChange });
+    const state = occurrenceState(occurrence.record, now, occurrence.scheduledEndAt);
+    const missed = state === "missed";
+    const resize = useOccurrenceResize({ task, occurrence, enabled: suppressHover && !busy && !missed, density, origin, timeZone, onChange });
     const displayedSegment = resize.preview ? splitOccurrenceDisplaySegments(resize.preview, timeZone, now).find(row => row.date === segment.date) ?? segment : segment;
-    const state = occurrenceState(occurrence.record);
     const completed = state === "completed";
     const geometry = displayRangeGeometry(displayedSegment.startMinute - origin, displayedSegment.endMinute - origin, density);
     const rangeLabel = `${minuteLabel(displayedSegment.startMinute)}–${minuteLabel(displayedSegment.endMinute)}`;
@@ -50,6 +51,7 @@ function OccurrenceCard({ task, segment, overlap, onChange, onSelect, onRequestR
     function expand() { if (!suppressHover) setExpanded(true); }
     async function advance() {
         if (!expanded || !expansionReady.current || suppressHover || pending.current || resize.saving) return;
+        if (missed) { onSelect(task.id, occurrence); return; }
         const target: OccurrenceTarget = occurrence.record ? { taskId: task.id, occurrenceId: occurrence.record.id } : { taskId: task.id, scheduledStartAt: occurrence.scheduledStartAt, scheduledEndAt: occurrence.scheduledEndAt };
         if (completed) { card.current?.focus(); onRequestReset({ taskTitle: task.title, target }); return; }
         pending.current = true;
@@ -63,9 +65,9 @@ function OccurrenceCard({ task, segment, overlap, onChange, onSelect, onRequestR
         catch (error) { setError(errorMessage(error)); }
         finally { pending.current = false; setBusy(false); }
     }
-    const status = state === "planned" ? "Planned" : state === "in-progress" ? "In Progress" : "Finished";
-    const action = state === "planned" ? "Start" : state === "in-progress" ? "Finish" : "Reset";
-    const actionText = state === "planned" ? "▶ Press to start" : state === "in-progress" ? "■ Press to finish" : "↺ Press to reset";
+    const status = missed ? "Missed" : state === "planned" ? "Planned" : state === "in-progress" ? "In Progress" : "Finished";
+    const action = missed ? "Open details" : state === "planned" ? "Start" : state === "in-progress" ? "Finish" : "Reset";
+    const actionText = missed ? "Open details" : state === "planned" ? "▶ Press to start" : state === "in-progress" ? "■ Press to finish" : "↺ Press to reset";
     return (
         <li className={`occurrence-card${completed ? " is-completed" : ""}${expanded ? " is-expanded" : ""}${resize.resizing ? " is-resizing" : ""}${overlap.groupSize > 1 ? " is-grouped" : ""}${geometry.height < 60 ? " is-short" : ""}${geometry.height < 44 ? " is-tiny" : ""}${geometry.height < 18 ? " is-micro" : ""}`} data-state={state} data-task-id={task.id} data-scheduled-at={occurrence.scheduledStartAt} data-scheduled-start-at={occurrence.scheduledStartAt} data-scheduled-end-at={occurrence.scheduledEndAt} data-overlap-count={overlap.groupSize} data-group-size={overlap.groupSize} data-group-column={overlap.column} data-planned-height={geometry.plannedHeight}
             style={{ top: geometry.top, height: Math.max(geometry.height, 1), "--card-column": overlap.column, "--card-columns": overlap.groupSize, "--card-width": overlap.widthFraction, "--card-offset": overlap.offsetFraction, "--card-layer": overlap.zIndex, "--expanded-top": `${expandedTop}px`, "--expanded-height": `${expandedHeight}px`, "--expand-scale-x": overlap.widthFraction, "--expand-scale-y": Math.min(1, geometry.height / expandedHeight), "--expand-origin-x": `${overlap.groupSize > 1 ? 100 * overlap.column / (overlap.groupSize - 1) : 50}%` } as CSSProperties}
@@ -92,9 +94,9 @@ function OccurrenceCard({ task, segment, overlap, onChange, onSelect, onRequestR
     );
 }
 
-export default function WeekSchedule({ from, tasks, occurrences, now, timeZone, filter, onChange, onSelect, onQuickAdd, quickAddEnabled = true, planningHours = DEFAULT_PLANNING_HOURS, showRevision = 0, centerRevision = 0, dataReady = true }: {
+export default function WeekSchedule({ from, tasks, occurrences, now, timeZone, filter, onChange, onSelect, onQuickAdd, quickAddEnabled = true, planningHours = DEFAULT_PLANNING_HOURS, weekStartsOn = 1, defaultDurationMinutes = 60, showRevision = 0, centerRevision = 0, dataReady = true }: {
     from: number; tasks: Task[]; occurrences: ScheduledOccurrence[]; now: number; timeZone: string;
-    filter: string; onChange: () => Promise<void>; onSelect: (id: number, occurrence: ScheduledOccurrence) => void; onQuickAdd?: (draft: QuickAddDraft) => void; quickAddEnabled?: boolean; planningHours?: PlanningHours; showRevision?: number; centerRevision?: number; dataReady?: boolean;
+    filter: string; onChange: () => Promise<void>; onSelect: (id: number, occurrence: ScheduledOccurrence) => void; onQuickAdd?: (draft: QuickAddDraft) => void; quickAddEnabled?: boolean; planningHours?: PlanningHours; weekStartsOn?: 0 | 1; defaultDurationMinutes?: number; showRevision?: number; centerRevision?: number; dataReady?: boolean;
 }) {
     const [reset, setReset] = useState<ResetRequest | null>(null);
     const [ctrlHeld, setCtrlHeld] = useState(false);
@@ -125,7 +127,7 @@ export default function WeekSchedule({ from, tasks, occurrences, now, timeZone, 
     const byId = new Map(tasks.map((task) => [task.id, task]));
     const byDay = new Map<string, DisplayOccurrence[]>();
     for (const occurrence of occurrences) {
-        const completed = occurrenceState(occurrence.record) === "completed";
+        const completed = occurrenceState(occurrence.record, now, occurrence.scheduledEndAt) === "completed";
         if ((filter === "completed" && !completed) || (filter === "incomplete" && completed)) continue;
         for (const segment of splitOccurrenceDisplaySegments(occurrence, timeZone, now, { from, to: shiftWeek(from, 1, timeZone) })) {
             const rows = byDay.get(segment.date) ?? [];
@@ -150,10 +152,10 @@ export default function WeekSchedule({ from, tasks, occurrences, now, timeZone, 
         const request = [from, showRevision, centerRevision].join(":");
         if (lastCenter.current === request) return;
         lastCenter.current = request;
-        board.current.scrollTop = from === weekRange(Date.now(), timeZone).from
+        board.current.scrollTop = from === weekRange(Date.now(), timeZone, weekStartsOn).from
             ? centeredScrollTop(localMinute(Date.now(), timeZone), start, end, density, viewportHeight)
             : 0;
-    }, [showRevision, centerRevision, dataReady, from, start, end, density, viewportHeight, timeZone]);
+    }, [showRevision, centerRevision, dataReady, from, start, end, density, viewportHeight, timeZone, weekStartsOn]);
     return (
         <>
         {(start < configuredStart || end > configuredEnd) && <p className="planning-range-note">This view includes saved tasks outside current planning hours.</p>}
@@ -179,7 +181,7 @@ export default function WeekSchedule({ from, tasks, occurrences, now, timeZone, 
                 })}
             </div>
         </div>
-        {onQuickAdd && quickAddEnabled && !reset && <TimetableQuickAdd board={board} density={density} origin={start} hours={planningHours} enabled onCreate={onQuickAdd} />}
+        {onQuickAdd && quickAddEnabled && !reset && <TimetableQuickAdd board={board} density={density} origin={start} hours={planningHours} defaultDurationMinutes={defaultDurationMinutes} enabled onCreate={onQuickAdd} />}
         {reset && <ResetOccurrenceDialog taskTitle={reset.taskTitle} target={reset.target} onChange={onChange} onClose={() => setReset(null)} fallbackFocus={board} />}
         </>
     );

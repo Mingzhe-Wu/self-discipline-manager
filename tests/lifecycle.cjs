@@ -8,7 +8,7 @@ const vm = require('node:vm');
 const ts = require('typescript');
 require('./register-typescript.cjs');
 
-async function boot({ lock = true, databaseError = false, loadError = false } = {}) {
+async function boot({ lock = true, databaseError = false, loadError = false, closeToTray = true } = {}) {
     const calls = [];
     const app = new EventEmitter();
     Object.assign(app, {
@@ -63,6 +63,7 @@ async function boot({ lock = true, databaseError = false, loadError = false } = 
             loadWindowGeometry: (_file, _areas, bounds) => ({ bounds, maximized: true }),
             trackWindowGeometry: () => () => calls.push('save-window'),
         },
+        './services/settingsService': { getLocalPreferences: () => { calls.push('preferences'); return {}; }, getUserSettings: () => ({ closeToTray }) },
         './ipc/settingsIpc': { registerSettingsIpc: () => {} },
         './ipc/taskIpc': { registerTaskIpc: () => calls.push('task-ipc') },
         './ipc/validateSender': { createSenderValidator: () => () => {} },
@@ -91,7 +92,7 @@ test('second process exits before database/IPC/scheduler initialization', async 
 
 test('startup orders migrations before consumers, blocks navigation, and restores the existing window', async () => {
     const { app, calls, window } = await boot();
-    assert.deepEqual(calls, ['database', 'task-ipc', 'maximize-window', 'renderer', 'tray', 'start-scheduler']);
+    assert.deepEqual(calls, ['database', 'preferences', 'task-ipc', 'maximize-window', 'renderer', 'tray', 'start-scheduler']);
     assert.equal(window.windowOpenHandler().action, 'deny');
     let prevented = 0;
     window.webContents.emit('will-navigate', { preventDefault: () => prevented++ });
@@ -118,3 +119,11 @@ for (const failure of ['databaseError', 'loadError']) {
         assert.ok(!calls.includes('save-window'));
     });
 }
+
+test('Close to tray preference takes effect without restart and off uses normal quit cleanup', async () => {
+    const { window, calls } = await boot({ closeToTray: false });
+    window.emit('close', { preventDefault() {} });
+    assert.ok(calls.includes('quit'));
+    assert.ok(calls.includes('save-window'));
+    assert.ok(calls.indexOf('stop-scheduler') < calls.indexOf('close-database'));
+});

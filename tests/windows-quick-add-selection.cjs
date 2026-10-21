@@ -7,7 +7,7 @@ const {_electron}=require('playwright-core');
   const page=await app.firstWindow(),errors=[];page.on('pageerror',error=>errors.push(error.message));
   const board=page.getByRole('region',{name:'Weekly schedule',exact:true});await board.waitFor();
   const toolbar=page.getByRole('navigation',{name:'Week navigation'});
-  const heights=[];for(const name of ['Manage recurring tasks','Planning hours','Add Task']){const b=toolbar.getByRole('button',{name,exact:true});heights.push((await b.boundingBox()).height);}assert.equal(new Set(heights).size,1,'task actions share a height');
+  const heights=[];for(const name of ['Task Center','Settings','Add Task']){const b=toolbar.getByRole('button',{name,exact:true});heights.push((await b.boundingBox()).height);}assert.equal(new Set(heights).size,1,'task actions share a height');
   assert.equal(await page.locator('.workspace-footer').count(),0);
   const help=toolbar.getByRole('button',{name:'Ctrl mode guidance',exact:true}),panel=page.locator('.ctrl-help-panel');await help.hover();await panel.waitFor({state:'visible'});assert.match(await panel.innerText(),/planned or actual, depending on task state/);await page.mouse.move(10,10);await panel.waitFor({state:'hidden'});await help.click();await page.mouse.move(10,10);await panel.waitFor({state:'visible'});await help.press('Escape');await panel.waitFor({state:'hidden'});
   const before=await board.locator('.day-column').nth(2).getAttribute('data-date');await page.getByRole('button',{name:'Next week',exact:true}).click();

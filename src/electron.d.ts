@@ -1,15 +1,21 @@
 import type { TaskDeletionReceipt, ResizeOccurrenceInput, OccurrenceTarget, UpdateOccurrenceTimesInput, UpdateOccurrencePlanInput, CreateTaskInput, Task, TaskOccurrence, WeekSchedule } from "../shared/types/task";
-import type { PlanningHours } from "../shared/types/settings";
+import type { UpdateLocalPreferencesInput, LocalPreferences, LocalProfile, UpdateUserSettingsInput, UserSettings, PlanningHours } from "../shared/types/settings";
 export {};
 
 declare global {
     interface Window {
         electronAPI: {
+            updateLocalPreferences: (input: UpdateLocalPreferencesInput) => Promise<LocalPreferences>;
+            getLocalPreferences: () => Promise<LocalPreferences>;
+            updateLocalProfile: (input: { displayName: string }) => Promise<LocalProfile>;
+            updateUserSettings: (input: UpdateUserSettingsInput) => Promise<UserSettings>;
             getPlanningHours: () => Promise<PlanningHours>;
             updatePlanningHours: (input: PlanningHours) => Promise<PlanningHours>;
             resizeTaskOccurrence: (input: ResizeOccurrenceInput) => Promise<TaskOccurrence>;
             updateTaskOccurrencePlan: (input: UpdateOccurrencePlanInput) => Promise<Task>;
             onWindowShown: (callback: () => void) => () => void;
+            getMissedTasks: () => Promise<WeekSchedule>;
+            lateStartTaskOccurrence: (input: OccurrenceTarget) => Promise<Task>;
             listTasks: () => Promise<Task[]>;
             createTask: (input: CreateTaskInput) => Promise<Task>;
             updateTask: (id: number, input: CreateTaskInput) => Promise<Task>;

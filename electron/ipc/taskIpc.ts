@@ -1,9 +1,11 @@
 import { ipcMain } from "electron";
 import type { ResizeOccurrenceInput, OccurrenceTarget, UpdateOccurrenceTimesInput, UpdateOccurrencePlanInput, CreateTaskInput } from "../../shared/types/task";
 import type { SenderValidator } from "./validateSender";
-import { resizeOccurrence, correctOccurrenceTimes, updateOccurrencePlan, startOccurrence, endOccurrence, updateOccurrenceTimes, createTask, deleteTask, undoTaskDeletion, getAllTasks, getWeekSchedule, listOccurrences, setTaskEnabled, updateTask } from "../services/taskService";
+import { lateStartOccurrence, getMissedTasks, resizeOccurrence, correctOccurrenceTimes, updateOccurrencePlan, startOccurrence, endOccurrence, updateOccurrenceTimes, createTask, deleteTask, undoTaskDeletion, getAllTasks, getWeekSchedule, listOccurrences, setTaskEnabled, updateTask } from "../services/taskService";
 
 export function registerTaskIpc(validateSender: SenderValidator) {
+    ipcMain.handle("task:missed", (event) => { validateSender(event); return getMissedTasks(); });
+    ipcMain.handle("task:late-start", (event, input: OccurrenceTarget) => { validateSender(event); return lateStartOccurrence(input); });
     ipcMain.handle("task:resize-occurrence", (event, input: ResizeOccurrenceInput) => { validateSender(event); return resizeOccurrence(input); });
     ipcMain.handle("task:update-occurrence-plan", (event, input: UpdateOccurrencePlanInput) => { validateSender(event); return updateOccurrencePlan(input); });
     ipcMain.handle("task:list", (event) => { validateSender(event); return getAllTasks(); });

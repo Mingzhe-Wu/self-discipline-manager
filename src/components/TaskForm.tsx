@@ -14,7 +14,7 @@ import Icon from "./Icon";
 const weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const timeOptions = Array.from({ length: 288 }, (_, index) => `${String(Math.floor(index / 12)).padStart(2, "0")}:${String(index % 12 * 5).padStart(2, "0")}`);
 
-export default function TaskForm({ task, occurrence, initialPlan, planningHours = DEFAULT_PLANNING_HOURS, onSave, onCancel, readOnly = false, disabled = false, formId, hideActions = false, autoSave = false, onSaveIdle, onSaveError }: { task?: Task; occurrence?: ScheduledOccurrence; initialPlan?: QuickAddDraft; planningHours?: PlanningHours; onSave: (input: CreateTaskInput, sync?: boolean) => Promise<void>; onCancel: () => void; readOnly?: boolean; disabled?: boolean; formId?: string; hideActions?: boolean; autoSave?: boolean; onSaveIdle?: () => void; onSaveError?: () => void }) {
+export default function TaskForm({ task, occurrence, initialPlan, defaultDurationMinutes = 60, planningHours = DEFAULT_PLANNING_HOURS, onSave, onCancel, readOnly = false, disabled = false, formId, hideActions = false, autoSave = false, onSaveIdle, onSaveError }: { task?: Task; occurrence?: ScheduledOccurrence; initialPlan?: QuickAddDraft; defaultDurationMinutes?: number; planningHours?: PlanningHours; onSave: (input: CreateTaskInput, sync?: boolean) => Promise<void>; onCancel: () => void; readOnly?: boolean; disabled?: boolean; formId?: string; hideActions?: boolean; autoSave?: boolean; onSaveIdle?: () => void; onSaveError?: () => void }) {
     const timeZone = task?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const initialStart = task ? Temporal.Instant.fromEpochMilliseconds(occurrence?.scheduledStartAt ?? task.scheduledStartAt).toZonedDateTimeISO(timeZone) : null;
     const initialEnd = task ? Temporal.Instant.fromEpochMilliseconds(occurrence?.scheduledEndAt ?? task.scheduledEndAt).toZonedDateTimeISO(timeZone) : null;
@@ -22,7 +22,7 @@ export default function TaskForm({ task, occurrence, initialPlan, planningHours 
     const initialDate = initialStart?.toPlainDate().toString() ?? initialPlan?.date ?? localDateInput(createdAt);
     const seriesRule = !occurrence ? task?.recurrenceRule : undefined;
     const initialStartTime = seriesRule?.startTime ?? initialStart?.toPlainTime().toString({ smallestUnit: initialStart.second || initialStart.millisecond ? "millisecond" : "minute" }) ?? initialPlan?.startTime ?? (planningHours.wakeTime <= "09:00" && planningHours.sleepTime > "10:00" ? "09:00" : planningHours.wakeTime);
-    const initialEndTime = seriesRule?.endTime ?? initialEnd?.toPlainTime().toString({ smallestUnit: initialEnd.second || initialEnd.millisecond ? "millisecond" : "minute" }) ?? initialPlan?.endTime ?? defaultEndTime(initialStartTime);
+    const initialEndTime = seriesRule?.endTime ?? initialEnd?.toPlainTime().toString({ smallestUnit: initialEnd.second || initialEnd.millisecond ? "millisecond" : "minute" }) ?? initialPlan?.endTime ?? defaultEndTime(initialStartTime, defaultDurationMinutes);
     const [category, setCategory] = useState<TaskCategory>(categoryMetadata(task?.category).key);
     const [title, setTitle] = useState(task?.title ?? "");
     const [scheduleType, setScheduleType] = useState<"one-time" | "recurring">(task?.scheduleType ?? "one-time");
@@ -51,7 +51,7 @@ export default function TaskForm({ task, occurrence, initialPlan, planningHours 
     }, [autoSave, disabled]);
     const typeLocked = task?.scheduleType === "one-time" && task.currentOccurrence?.scheduledStartAt === task.scheduledStartAt && occurrenceState(task.currentOccurrence) !== "planned";
     const recurringSelection = task?.scheduleType === "recurring" && occurrence !== undefined;
-    const hasActualHistory = recurringSelection && occurrence.record !== null && occurrenceState(occurrence.record) !== "planned";
+    const hasActualHistory = recurringSelection && occurrence.record !== null && (occurrence.record.startedAt !== null || occurrence.record.endedAt !== null || occurrence.record.legacyCompleted);
     const detached = recurringSelection && !sync;
     const effectiveScheduleType = detached ? "one-time" : scheduleType;
     const originalRule = task?.recurrenceRule;
@@ -91,9 +91,9 @@ export default function TaskForm({ task, occurrence, initialPlan, planningHours 
             else if (succeeded) onSaveIdle?.();
         }
     }
-    const startOptions = timeOptions.filter((time) => time >= planningHours.wakeTime && time < planningHours.sleepTime);
-    const endOptions = timeOptions.filter((time) => time > planningHours.wakeTime && time <= planningHours.sleepTime);
-    const options = (value: string, allowed: string[]) => <>{!allowed.includes(value) && <option value={value}>{value === "" ? "Choose time" : <>{value}{task && (value === initialStartTime || value === initialEndTime) ? " (saved)" : " (outside planning hours)"}</>}</option>}{allowed.map((time) => <option key={time} value={time}>{time}</option>)}</>;
+    const startOptions = timeOptions;
+    const endOptions = timeOptions;
+    const options = (value: string, allowed: string[]) => <>{!allowed.includes(value) && <option value={value}>{value === "" ? "Choose time" : <>{value}{task && (value === initialStartTime || value === initialEndTime) ? " (saved)" : ""}</>}</option>}{allowed.map((time) => <option key={time} value={time}>{time}</option>)}</>;
 
     if (readOnly && task) {
         const metadata = categoryMetadata(task.category), rule = task.recurrenceRule;

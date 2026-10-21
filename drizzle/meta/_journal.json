@@ -57,6 +57,13 @@
       "when": 1792530373167,
       "tag": "0007_task_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792610440298,
+      "tag": "0008_local_profile_settings",
+      "breakpoints": true
     }
   ]
 }

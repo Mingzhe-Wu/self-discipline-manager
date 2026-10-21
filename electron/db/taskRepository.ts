@@ -30,6 +30,24 @@ export function createTask(values: typeof tasksTable.$inferInsert, times: Planne
     });
 }
 
+/** The new task and its initial running occurrence commit together. */
+export function createStartedTask(values: typeof tasksTable.$inferInsert, now: number): TaskRecord {
+    return getDatabase().transaction(transaction => {
+        const task = transaction.insert(tasksTable).values(values).returning().get();
+        transaction.insert(taskOccurrencesTable).values({ taskId: task.id, scheduledStartAt: task.scheduledStartAt,
+            scheduledEndAt: task.scheduledEndAt, startedAt: now, recordedAt: now, progressSource: "normal", createdAt: now, updatedAt: now }).run();
+        return task;
+    });
+}
+
+export function findMissedOccurrences(now: number): OccurrenceRecord[] {
+    return getDatabase().select({ occurrence: taskOccurrencesTable }).from(taskOccurrencesTable)
+        .innerJoin(tasksTable, eq(tasksTable.id, taskOccurrencesTable.taskId))
+        .where(and(isNull(tasksTable.deletedAt), isNull(taskOccurrencesTable.startedAt), isNull(taskOccurrencesTable.endedAt),
+            eq(taskOccurrencesTable.legacyCompleted, false), lt(taskOccurrencesTable.scheduledEndAt, now)))
+        .orderBy(desc(taskOccurrencesTable.scheduledStartAt), desc(taskOccurrencesTable.id)).all().map(row => row.occurrence);
+}
+
 export function materializeOccurrences(taskId: number, times: PlannedRange[], through: number, now: number): void {
     const db = getDatabase();
     const task = getTask(taskId)!;

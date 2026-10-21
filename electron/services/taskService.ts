@@ -9,7 +9,7 @@ import { deriveOccurrences, expectedTimes, isExcluded } from "../../shared/sched
 import { assertPlanningRange } from "../../shared/scheduling/planningHours";
 import { getPlanningHours } from "./settingsService";
 
-import { occurrenceState } from "../../shared/occurrenceLifecycle";
+import { canLateStart, occurrenceState } from "../../shared/occurrenceLifecycle";
 import { occurrenceDisplayRange } from "../../shared/scheduling/occurrenceDisplay";
 import { resizeField, resizeOccurrenceRange } from "../../shared/scheduling/occurrenceResize";
 import type { ResizeOccurrenceInput } from "../../shared/types/task";
@@ -94,7 +94,7 @@ function validateTaskInput(input: CreateTaskInput, existing?: TaskRecord) {
             scheduleEffectiveAt: Date.now(), excludedOccurrences: existing?.excludedOccurrences };
         const from = Math.max(Date.now(), scheduledStartAt);
         // Compatible DST resolution can move an otherwise valid clock range
-        // past sleep time. Check a complete seasonal cycle without writing rows.
+        // into a different local range. Check a complete seasonal cycle without writing rows.
         const validateSeason = (after: number) => {
             for (const at of expectedTimes(schedule, after, after + 370 * DAY)) {
                 assertPlanningRange(at, occurrenceEndAt(schedule, at), timeZone, hours);
@@ -107,7 +107,7 @@ function validateTaskInput(input: CreateTaskInput, existing?: TaskRecord) {
             const afterExclusions = (existing?.excludedOccurrences ?? []).reduce((latest, range) => Math.max(latest, range.scheduledStartAt + 1), from);
             if (afterExclusions > from) validateSeason(afterExclusions);
         } catch (error) {
-            throw new Error(`Planning hours conflict for "${input.title.trim()}": ${error instanceof Error ? error.message : "invalid seasonal range"}`, { cause: error });
+            throw new Error(`Invalid recurring range for "${input.title.trim()}": ${error instanceof Error ? error.message : "invalid seasonal range"}`, { cause: error });
         }
     }
     return { title: input.title.trim(), category, scheduleType: input.scheduleType, recurrenceRule, scheduledStartAt, scheduledEndAt, timeZone };
@@ -204,10 +204,36 @@ function resolveOccurrence(input: OccurrenceTarget, create = true): TaskOccurren
 export function startOccurrence(input: OccurrenceTarget): TaskOccurrence {
     const occurrence = resolveOccurrence(input);
     if (isExcluded(requireTask(input.taskId), occurrence.scheduledStartAt, occurrence.scheduledEndAt)) throw new Error("Task occurrence was excluded from its schedule");
+    if (occurrenceState(occurrence) === "missed") throw new Error("Missed occurrences cannot be started; use Start late in Details for today");
     if (occurrenceState(occurrence) !== "planned") return occurrence;
     const now = Date.now();
     return repository.saveProgress(occurrence.id, { startedAt: now, endedAt: null,
         recordedAt: occurrence.recordedAt ?? now, progressSource: "normal", legacyCompleted: false, updatedAt: now });
+}
+
+/** Preserve the missed record; this is a new independent attempt, not a resume. */
+export function lateStartOccurrence(input: OccurrenceTarget, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone): Task {
+    const task = requireTask(input?.taskId), original = resolveOccurrence(input);
+    const now = Date.now();
+    if (occurrenceState(original, now) !== "missed") throw new Error("Only a Missed occurrence can be started late");
+    if (!canLateStart(original.scheduledStartAt, now, timeZone)) throw new Error("Start late is available only for today's Missed occurrences");
+    if (isExcluded(task, original.scheduledStartAt, original.scheduledEndAt)) throw new Error("Task occurrence was excluded from its schedule");
+    const local = Temporal.Instant.fromEpochMilliseconds(now).toZonedDateTimeISO(timeZone);
+    const scheduledStartAt = local.round({ smallestUnit: "minute", roundingIncrement: 5, roundingMode: "halfExpand" }).epochMilliseconds;
+    const scheduledEndAt = scheduledStartAt + original.scheduledEndAt - original.scheduledStartAt;
+    validateTime(scheduledEndAt);
+    return toTask(repository.createStartedTask({ title: task.title, category: task.category, enabled: task.enabled, origin: "user",
+        scheduleType: "one-time", recurrenceRule: null, timeZone, scheduledStartAt, scheduledEndAt,
+        scheduleEffectiveAt: scheduledStartAt, generatedThrough: scheduledStartAt, createdAt: now, updatedAt: now }, now));
+}
+
+export function getMissedTasks(): WeekSchedule {
+    const tasks = getAllTasks(), definitions = new Map(repository.getAllTasks().map(task => [task.id, task]));
+    const occurrences = repository.findMissedOccurrences(Date.now()).filter(row => {
+        const task = definitions.get(row.taskId)!;
+        return expectedTimes(task, row.scheduledStartAt, row.scheduledStartAt + 1).length === 1 && occurrenceEndAt(task, row.scheduledStartAt) === row.scheduledEndAt;
+    }).map(record => ({ taskId: record.taskId, scheduledStartAt: record.scheduledStartAt, scheduledEndAt: record.scheduledEndAt, record }));
+    return { tasks, occurrences };
 }
 
 export function updateOccurrencePlan(input: UpdateOccurrencePlanInput): Task {
@@ -254,6 +280,7 @@ export function updateOccurrenceTimes(input: UpdateOccurrenceTimesInput): TaskOc
     validateOccurrenceTimes(input);
     const occurrence = resolveOccurrence(input);
     const now = Date.now();
+    if (occurrenceState(occurrence, now) === "missed" && input.startedAt === null && input.endedAt === null) throw new Error("Missed occurrences cannot be reset; enter actual times to correct history");
     return repository.saveProgress(occurrence.id, { startedAt: input.startedAt, endedAt: input.endedAt,
         recordedAt: occurrence.recordedAt ?? now, progressSource: occurrence.recordedAt === null ? "backfill" : "corrected",
         legacyCompleted: false, updatedAt: now });
@@ -282,6 +309,7 @@ export function resizeOccurrence(input: ResizeOccurrenceInput): TaskOccurrence {
     validateTime(input.at);
     const task = requireTask(input.target?.taskId), original = resolveOccurrence(input.target);
     if (isExcluded(task, original.scheduledStartAt, original.scheduledEndAt)) throw new Error("Task occurrence was excluded from its schedule");
+    if (occurrenceState(original) === "missed") throw new Error("Missed occurrences must be corrected in Details");
     if (occurrenceState(original) !== input.expectedState) throw new Error("Task state changed; refresh and try again");
     const occurrence = { taskId: task.id, scheduledStartAt: original.scheduledStartAt, scheduledEndAt: original.scheduledEndAt, record: original };
     const field = resizeField(occurrence, input.edge);

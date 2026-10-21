@@ -58,8 +58,10 @@ History/backfill is temporarily absent from Task Details; no stored history or s
 
 ## Series editing and Ctrl guidance
 
-Manage recurring tasks sits in the top toolbar beside Planning hours and Add Task; these three buttons share a 36px height with content-sized widths. A round question-mark button at the far right exposes the Ctrl instructions on hover, focus or click. Escape dismisses the instructions.
+Task Center sits in the top toolbar beside Planning hours and Add Task; these three buttons share a 36px height with content-sized widths. A round question-mark button at the far right exposes the Ctrl instructions on hover, focus or click. Escape dismisses the instructions.
 
-The recurring list opens the existing TaskForm in an Edit recurring task modal, prefilled from the series definition and recurrence clock times. Save Task updates the parent definition; Save/Cancel return to the list. Timetable Details remains occurrence-specific.
+A recurring series entry in Task Center opens the existing TaskForm in an Edit recurring task modal, prefilled from the series definition and recurrence clock times. Save Task updates the parent definition; Save/Cancel return to the list. Timetable Details remains occurrence-specific.
 
 While Ctrl is held, the bottom-center label reads: "Ctrl mode active. See the instructions in the top-right corner." The non-interactive pointer hint stays visible over empty space, selected ranges and cards, and changes for start selection, end confirmation, edge targeting and active dragging. Drag hints include release-to-save and right-click-to-cancel guidance. The pointer guide remains visible and snapped to five minutes; no blur or soft-focus treatment is applied.
+
+Task Center defaults to all records with two lightweight, mutually exclusive Recurring/Missed chips. Re-selecting a chip clears it. Titles are display text, not identity: same-name Tasks and distinct missed occurrences remain separate rows, identified by their schedule/type. Series rows open series editing; missed rows open selected-occurrence Details; ordinary one-time rows open normal Details.
