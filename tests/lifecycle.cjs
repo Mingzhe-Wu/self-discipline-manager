@@ -6,6 +6,7 @@ const { pathToFileURL } = require('node:url');
 const { EventEmitter } = require('node:events');
 const vm = require('node:vm');
 const ts = require('typescript');
+require('./register-typescript.cjs');
 
 async function boot({ lock = true, databaseError = false, loadError = false } = {}) {
     const calls = [];
@@ -28,8 +29,12 @@ async function boot({ lock = true, databaseError = false, loadError = false } = 
             this.visible = true;
             this.minimized = true;
             this.webContents = new EventEmitter();
+            this.webContents.send = () => {};
             this.webContents.setWindowOpenHandler = (handler) => { this.windowOpenHandler = handler; };
         }
+        removeMenu() {}
+        maximize() { calls.push('maximize-window'); }
+        isVisible() { return this.visible; }
         isDestroyed() { return false; }
         isMinimized() { return this.minimized; }
         restore() { this.minimized = false; }
@@ -48,17 +53,22 @@ async function boot({ lock = true, databaseError = false, loadError = false } = 
         destroy() { calls.push('destroy-tray'); }
     }
     const modules = {
-        electron: { app, BrowserWindow, Tray, Menu: { buildFromTemplate: (items) => items }, dialog: { showErrorBox: () => calls.push('fatal-dialog') } },
+        electron: { app, BrowserWindow, Tray, screen: { getPrimaryDisplay: () => ({ workArea: {x:0,y:0,width:1920,height:1080} }), getAllDisplays: () => [{ workArea: {x:0,y:0,width:1920,height:1080} }] }, Menu: { buildFromTemplate: (items) => items }, dialog: { showErrorBox: () => calls.push('fatal-dialog') } },
         './db/database': {
             initializeDatabase: () => { calls.push('database'); if (databaseError) throw new Error('migration failed'); },
             closeDatabase: () => calls.push('close-database'),
         },
+        './window/windowSizing': require('../electron/window/windowSizing.ts'),
+        './window/windowGeometry': {
+            loadWindowGeometry: (_file, _areas, bounds) => ({ bounds, maximized: true }),
+            trackWindowGeometry: () => () => calls.push('save-window'),
+        },
+        './ipc/settingsIpc': { registerSettingsIpc: () => {} },
         './ipc/taskIpc': { registerTaskIpc: () => calls.push('task-ipc') },
-        './ipc/reminderIpc': { registerReminderIpc: () => calls.push('reminder-ipc') },
         './ipc/validateSender': { createSenderValidator: () => () => {} },
-        './scheduler/reminderScheduler': {
-            startReminderScheduler: () => calls.push('start-scheduler'),
-            stopReminderScheduler: () => calls.push('stop-scheduler'),
+        './scheduler/taskScheduler': {
+            startTaskScheduler: () => calls.push('start-scheduler'),
+            stopTaskScheduler: () => calls.push('stop-scheduler'),
         },
     };
     const filename = path.resolve(__dirname, '../electron/main.ts');
@@ -81,7 +91,7 @@ test('second process exits before database/IPC/scheduler initialization', async 
 
 test('startup orders migrations before consumers, blocks navigation, and restores the existing window', async () => {
     const { app, calls, window } = await boot();
-    assert.deepEqual(calls, ['database', 'task-ipc', 'reminder-ipc', 'renderer', 'tray', 'start-scheduler']);
+    assert.deepEqual(calls, ['database', 'task-ipc', 'maximize-window', 'renderer', 'tray', 'start-scheduler']);
     assert.equal(window.windowOpenHandler().action, 'deny');
     let prevented = 0;
     window.webContents.emit('will-navigate', { preventDefault: () => prevented++ });
@@ -94,6 +104,7 @@ test('startup orders migrations before consumers, blocks navigation, and restore
     assert.equal(window.minimized, false);
     assert.ok(calls.includes('focus'));
     app.emit('before-quit');
+    assert.ok(calls.includes('save-window'));
     assert.ok(calls.indexOf('stop-scheduler') < calls.indexOf('close-database'));
 });
 
@@ -104,5 +115,6 @@ for (const failure of ['databaseError', 'loadError']) {
         assert.ok(calls.includes('exit:1'));
         assert.ok(calls.includes('close-database'));
         assert.ok(!calls.includes('start-scheduler'));
+        assert.ok(!calls.includes('save-window'));
     });
 }

@@ -1,32 +1,33 @@
-import type { CreateReminderInput, Reminder } from "../../shared/types/reminder";
-import * as repository from "../db/reminderRepository";
-
-export function getAllReminders(): Reminder[] {
-    return repository.getAllReminders();
+import * as repository from "../db/reminderSlotRepository";
+import * as taskRepository from "../db/taskRepository";
+import { occurrenceEndAt } from "../../shared/scheduling/recurrence";
+import { expectedTimes } from "../../shared/scheduling/week";
+import { getAllTasks } from "./taskService";
+import { reminderSlotAt } from "./reminderPolicy";
+export type DueReminder = { occurrenceId: number; taskId: number; scheduledStartAt: number; title: string; slot: number };
+export function getDueReminders(): DueReminder[] {
+    getAllTasks();
+    const now = Date.now();
+    return repository.findCandidates(now).flatMap(({ occurrence, task }) => {
+        task = taskRepository.getTask(task.id)!;
+        const slot = reminderSlotAt(occurrence.scheduledStartAt, now);
+        if (slot === null || (expectedTimes(task, occurrence.scheduledStartAt, occurrence.scheduledStartAt + 1).length !== 1 || occurrenceEndAt(task, occurrence.scheduledStartAt) !== occurrence.scheduledEndAt)) return [];
+        const state = repository.getSlot(occurrence.id, slot)?.state;
+        return state && state !== "failed" ? [] : [{ occurrenceId: occurrence.id, taskId: task.id,
+            scheduledStartAt: occurrence.scheduledStartAt, title: task.title, slot }];
+    });
 }
-
-export function createReminder(input: CreateReminderInput): Reminder {
-    if (!input || typeof input.title !== "string" || !input.title.trim()) {
-        throw new Error("Reminder title cannot be empty");
-    }
-    if (!Number.isSafeInteger(input.dueAt) || !Number.isFinite(new Date(input.dueAt).getTime())) {
-        throw new Error("Reminder time must be a valid timestamp");
-    }
-    // Past times are allowed: overdue reminders are delivered on the next check.
-    return repository.createReminder(input.title.trim(), input.dueAt, Date.now());
+export function isReminderRelevant(reminder: DueReminder): boolean {
+    const task = taskRepository.getTask(reminder.taskId);
+    const occurrence = taskRepository.getOccurrence(reminder.taskId, reminder.occurrenceId);
+    return !!task && task.enabled && !!occurrence && occurrence.startedAt === null && occurrence.endedAt === null &&
+        !occurrence.legacyCompleted && !occurrence.remindersSuppressed && reminderSlotAt(occurrence.scheduledStartAt, Date.now()) === reminder.slot &&
+        expectedTimes(task, occurrence.scheduledStartAt, occurrence.scheduledStartAt + 1).length === 1 && occurrenceEndAt(task, occurrence.scheduledStartAt) === occurrence.scheduledEndAt;
 }
-
-export function deleteReminder(id: number): void {
-    if (!Number.isSafeInteger(id) || id <= 0) {
-        throw new Error("Invalid reminder ID");
-    }
-    repository.deleteReminder(id);
+export function claimReminder(reminder: DueReminder): boolean {
+    return isReminderRelevant(reminder) && repository.claimSlot(reminder.occurrenceId, reminder.slot, Date.now());
 }
-
-export function getDueReminders(now: number = Date.now()): Reminder[] {
-    return repository.findDueReminders(now);
-}
-
-export function markReminderAsNotified(id: number): void {
-    repository.markReminderAsNotified(id);
-}
+export function markReminderSent(reminder: DueReminder) { repository.finishSlot(reminder.occurrenceId, reminder.slot, "sent", Date.now()); }
+export function markReminderFailed(reminder: DueReminder) { repository.finishSlot(reminder.occurrenceId, reminder.slot, "failed", Date.now()); }
+export function abandonReminder(reminder: DueReminder) { repository.finishSlot(reminder.occurrenceId, reminder.slot, "unknown", Date.now()); }
+export function recoverInterruptedReminders() { repository.recoverInterruptedSlots(); }

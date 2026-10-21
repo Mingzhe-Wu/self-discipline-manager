@@ -1,20 +1,20 @@
 # Developer walkthrough
 
-Use this as a reading checklist, not an API manual. Paths are relative to the project root. **Deep** means you should be able to explain the control flow and change it; **Role** means know its inputs, outputs, and when to consult it. No Git history exists yet, so this maps the current foundation rather than claiming a historical diff.
+Use this as a reading checklist, not an API manual. Paths are relative to the project root. **Deep** means you should be able to explain the control flow and change it; **Role** means know its inputs, outputs, and when to consult it. This maps the current foundation rather than claiming a historical diff.
 
 ## Start with one request
 
-Read `src/App.tsx` → `electron/preload.ts` → `electron/ipc/taskIpc.ts` → `electron/services/taskService.ts` → `electron/db/taskRepository.ts` → `electron/db/schema.ts`. Creating a task follows that path to SQLite; the result returns as a Promise and React updates its state. Only repositories issue application queries. Shared types describe the crossing data; they do not validate runtime input.
+Read `src/App.tsx` → `electron/preload.ts` → `electron/ipc/taskIpc.ts` → `electron/services/taskService.ts` → `electron/db/taskRepository.ts` → `electron/db/schema.ts`. Creating a task follows that path to SQLite; the result returns as a Promise and React updates its state. Only repositories issue application queries. Task creation includes a schedule; Start/End/corrections target an occurrence ID or validated planned start/end pair, never a whole recurring task. Shared types describe data but do not validate runtime input. See [the model and reporting guide](task-scheduling.md).
 
-Then read `electron/main.ts` → `electron/db/database.ts` → `electron/scheduler/reminderScheduler.ts` for startup and background work. Finish with `electron-builder.json` and `docs/windows-build.md` for installation.
+Then read `electron/main.ts` → `electron/db/database.ts` → `electron/scheduler/taskScheduler.ts` for startup and background work. Finish with `electron-builder.json` and `docs/windows-build.md` for installation.
 
 ## Electron lifecycle and bridge
 
 | File | Responsibility / layer | Callers and dependencies | Main functions / exports | Read |
 | --- | --- | --- | --- | --- |
 | `electron/main.ts` | Main-process entry point: single-instance lock, window/tray, startup failure handling, shutdown. | Electron runs its built output via `package.json`; it calls database, IPC registration, sender validator, scheduler. | Internal `createWindow`, `showMainWindow`, `createTray`, `cleanup`, `reportFatalError`; app event handlers. No exports. | Deep |
-| `electron/preload.ts` | Isolated bridge between React and Electron IPC. Exposes seven semantic methods, no raw Node/IPC access. | Loaded by `main.ts` into the window; React calls `window.electronAPI`; invokes handlers in `electron/ipc/`. | `contextBridge.exposeInMainWorld("electronAPI", …)` with Task list/create/update/delete and Reminder list/create/delete. | Deep |
-| `src/electron.d.ts` | Renderer type declaration for that bridge; does not implement it. | TypeScript checks React callers using shared Task/Reminder types. Keep signatures aligned with preload. | Augments `Window.electronAPI`, returning typed Promises. | Deep |
+| `electron/preload.ts` | Isolated Task-only IPC bridge; no raw Node/IPC exposure. | Main loads it; React calls electronAPI; handlers live in taskIpc. | Ten methods: list/create/update/delete, week schedule, notification enablement, list occurrences, Start, End, update actual times. | Deep |
+| `src/electron.d.ts` | Renderer declarations for the bridge. | TypeScript checks React callers against shared Task/Occurrence DTOs; keep aligned with preload. | Window.electronAPI Promise signatures. | Deep |
 | `index.html` | Renderer HTML entry and production Content Security Policy. | electron-vite builds it; main loads the built page; it loads `src/main.tsx`. | `#root`, module script, CSP meta tag. | Role |
 
 Startup order: acquire lock → app ready → migrate userData database → register handlers → load window/preload → create tray → start scheduler. Quit stops scheduling before closing SQLite. Closing the window only hides it. `contextIsolation: true`, `nodeIntegration: false`; `sandbox: false` supports the existing ESM preload.
@@ -23,21 +23,18 @@ Startup order: acquire lock → app ready → migrate userData database → regi
 
 | File | Responsibility / layer | Callers and dependencies | Main functions / exports | Read |
 | --- | --- | --- | --- | --- |
-| `electron/ipc/validateSender.ts` | IPC security boundary: require the intended window, top frame, and trusted document URL. | `main.ts` creates a validator; both IPC modules call it before services. | `createSenderValidator`, `SenderValidator`. | Deep |
-| `electron/ipc/taskIpc.ts` | Task request/response wiring; service errors reject `invoke`. | Registered once by main; receives preload `task:*` requests; calls `taskService`. | `registerTaskIpc(validateSender)`. | Deep |
-| `electron/ipc/reminderIpc.ts` | Reminder request/response wiring. | Registered by main; receives preload `reminder:*`; calls `reminderService`. | `registerReminderIpc(validateSender)`. | Deep |
-| `electron/services/taskService.ts` | Task business rules: trim titles, reject empty/non-string titles, invalid IDs, and non-boolean completion. | Task IPC calls it; delegates persistence to `taskRepository`. | `getAllTasks`, `createTask`, `updateTaskCompleted`, `deleteTask`; internal `validateTaskId`. | Deep |
-| `electron/services/reminderService.ts` | Reminder validation/normalization and creation time; accepts past due times. | Reminder IPC and scheduler call it; delegates to `reminderRepository`. | `getAllReminders`, `createReminder`, `deleteReminder`, `getDueReminders`, `markReminderAsNotified`. | Deep |
-| `electron/db/taskRepository.ts` | Task persistence only: Drizzle select/insert/update/delete. | Called by Task service; uses `getDatabase()` and `tasksTable`. | `getAllTasks`, `createTask`, `updateTaskCompleted`, `deleteTask`. | Deep |
-| `electron/db/reminderRepository.ts` | Reminder persistence, due filtering, and notified flag. | Called by Reminder service; uses `getDatabase()` and `remindersTable`. | `getAllReminders`, `createReminder`, `deleteReminder`, `findDueReminders`, `markReminderAsNotified`. | Deep |
+| `electron/ipc/validateSender.ts` | IPC security boundary: require the intended window, top frame, and trusted document URL. | `main.ts` creates a validator; Task IPC handlers call it before services. | `createSenderValidator`, `SenderValidator`. | Deep |
+| `electron/ipc/taskIpc.ts` | All Task and occurrence request/response wiring. | Main registers once; preload invokes task:*; validates sender then calls Task service. | registerTaskIpc(validateSender), ten handlers. | Deep |
+| `electron/services/taskService.ts` | Schedule validation, history-preserving edits, bounded week projection, materialization and Start/End/backfill validation. | IPC and scheduler call it; uses shared recurrence/week helpers and repository. | getAllTasks, createTask, updateTask, getWeekSchedule, listOccurrences, startOccurrence, endOccurrence, updateOccurrenceTimes, setTaskEnabled, deleteTask. | Deep |
+| `electron/db/taskRepository.ts` | Task/occurrence database queries and atomic writes; no calendar rules. | Task service calls it; uses database/schema. | createTask, updateTask (atomic cutover), materializeOccurrences, ensureOccurrence, getOccurrenceAt, listOccurrences, current/next lookup, saveProgress, enabled/delete queries. | Deep |
 
-Service/repository functions sometimes share names: imports alias them or use `repository.*` to make the boundary clear. IPC does not query SQLite, and services do not show Electron notifications.
+Services and repositories sometimes share names: imports alias them or use `repository.*` to make the boundary clear. IPC does not query SQLite, and services do not show Electron notifications.
 
 ## Database, migrations, and scheduling
 
 | File | Responsibility / layer | Callers and dependencies | Main functions / exports | Read |
 | --- | --- | --- | --- | --- |
-| `electron/db/schema.ts` | Drizzle database model: Task and standalone Reminder tables. | Repositories import tables; Drizzle Kit reads it to generate migrations. | `tasksTable`, `remindersTable`; inferred DB types `Task`, `Reminder`. | Deep |
+| `electron/db/schema.ts` | Drizzle Task and per-occurrence model. | Repositories import tables; Drizzle Kit reads it for migration metadata. | tasksTable, taskOccurrencesTable, occurrenceReminderSlotsTable, inferred TaskRecord/OccurrenceRecord. | Deep |
 | `electron/db/database.ts` | Owns the native connection and migration lifecycle; publishes DB only after successful migrations. | Main initializes/closes it; repositories obtain its Drizzle handle; tests use isolated databases. | `initializeDatabase`, `getDatabase`, `closeDatabase`. | Deep |
 | `drizzle.config.ts` | Development migration-generation configuration, not installed startup configuration. | Drizzle Kit reads schema and writes `drizzle/`; `dev.db` is a development target only. | Default `defineConfig` export. | Role |
 | `drizzle/0000_simple_jean_grey.sql` | First persisted schema change. | Runtime migrator applies it according to the journal. | SQL creating `tasks`; no TS exports. | Role |
@@ -45,25 +42,25 @@ Service/repository functions sometimes share names: imports alias them or use `r
 | `drizzle/meta/_journal.json` | Ordered migration tags/timestamps. Required at runtime alongside SQL. | Drizzle generation updates it; runtime migrator reads it. | `entries` migration history. | Role |
 | `drizzle/meta/0000_snapshot.json` | Generated Task-only schema snapshot. | Drizzle Kit uses generation metadata; not queried by application code. | Schema JSON, no functions. | Role |
 | `drizzle/meta/0001_snapshot.json` | Generated Task+Reminder schema snapshot. | Drizzle Kit uses it when generating the next diff. | Schema JSON, no functions. | Role |
-| `electron/scheduler/reminderScheduler.ts` | Main-process background notifications; startup check plus 60-second polling. | Main starts/stops it; it calls Reminder service and Electron `Notification`. | `startReminderScheduler`, `stopReminderScheduler`; internal `checkReminders`, timer, pending map. | Deep |
+| `electron/scheduler/taskScheduler.ts` | Local native notifications for due Task occurrences; thirty-second polling plus startup. | Main starts/stops it; Reminder service selects/claims eligible slots; Electron delivers notifications. | startTaskScheduler, stopTaskScheduler; pending occurrence/slot map, checkOccurrences. | Deep |
 
-The live DB is `app.getPath("userData")/data.db`, outside installed resources. Reminder times are Unix milliseconds; booleans are SQLite integer boolean mode. The scheduler selects overdue, unnotified rows, skips pending attempts, and marks notified after the native `show` event. A crash between display and DB acknowledgement can still cause a repeat. Commit migration SQL, journal, and snapshots even though they are generated; do not edit released migration history to change a deployed schema.
+The live DB is `app.getPath("userData")/data.db`, outside installed resources. Task/occurrence times are Unix milliseconds. A unique (taskId, scheduledStartAt, scheduledEndAt) persists each planned range. Tasks save their IANA time zone; recurring rules use startTime/endTime. The saved calendar rule catches up missing dates after downtime; completion changes only its occurrence. The scheduler selects the latest relevant reminder slot and acknowledges native show events; no overdue backlog is replayed. Commit all SQL/journal/snapshots; do not edit released history.
 
 ## Shared contracts and React
 
 | File | Responsibility / layer | Callers and dependencies | Main functions / exports | Read |
 | --- | --- | --- | --- | --- |
-| `shared/types/task.ts` | Cross-process Task data contract, independent of Drizzle. | Renderer, bridge declarations, Task service. | `Task` interface. | Deep |
-| `shared/types/reminder.ts` | Cross-process Reminder and creation contracts. | Renderer, preload/declarations, IPC, Reminder service. | `Reminder`, `CreateReminderInput`. | Deep |
+| `shared/types/task.ts` | Cross-process scheduling/history contracts, independent of Drizzle. | Renderer, preload/declarations, IPC, services. | Task, TaskOccurrence, ScheduledOccurrence, WeekSchedule, RecurrenceRule, CreateTaskInput, OccurrenceTarget (ID or planned start/end pair), UpdateOccurrenceTimesInput. | Deep |
 | `src/main.tsx` | React bootstrap. | Loaded by HTML; mounts `App`, imports `index.css`. | `createRoot(...).render(...)` with StrictMode. | Role |
-| `src/App.tsx` | Root UI and Task state/loading/errors; includes Reminder UI. | React bootstrap renders it; it calls bridge methods and Task components. | Default `App`; create/toggle/delete handlers, initial load effect, error helper. | Deep |
-| `src/components/TaskForm.tsx` | Task title input; sends a create callback to App. | App renders it and supplies `onCreate`; no direct IPC. | Default `TaskForm`, internal `handleSubmit`. | Deep |
-| `src/components/TaskList.tsx` | Maps Task data to rows and forwards callbacks. | App renders it; renders `TaskItem`. | Default `TaskList`. | Role |
-| `src/components/TaskItem.tsx` | One Task checkbox/title/delete button. | TaskList renders it; callbacks lead back to App. | Default `TaskItem`; props callbacks. | Role |
-| `src/components/Reminders.tsx` | Reminder form/list, local-time conversion, busy/error/loading state, delete, status refresh. | App renders it; calls Reminder bridge methods; uses shared types. | Default `Reminders`; `createReminder`, `deleteReminder`, refresh effect, request-version ref. | Deep |
-| `src/index.css` | Currently loaded global appearance. | Imported by `src/main.tsx`. | CSS rules, no exports. | Role |
+| `src/App.tsx` | Week state/navigation, notices, filter, modal routing (add/edit/details/manage), minute/focus refresh. | Bootstrap renders it; semantic APIs plus TaskForm/WeekSchedule/TaskDetails/Dialog. | App, reload/create/save/navigate; latest-week request guard, saving state and stable focus target. | Deep |
+| `src/components/TaskForm.tsx` | Same structured form for Add/Edit; five-minute Start/End Time selects, weekdays, notification switch and validation. | App supplies onSave/onCancel inside Dialog; shared inputs, Temporal and formatting. | TaskForm, submit; unchanged legacy ranges survive title-only edits without rounding. | Deep |
+| `src/components/WeekSchedule.tsx` | 24-hour time-positioned day columns, two-hour grid lines, viewer-midnight segments and overlapping lifecycle/range cards. | App renders it; timetableLayout computes geometry/overlap; card surface advances lifecycle by click/Enter/Space; separate details arrow stops propagation; Finished opens ResetOccurrenceDialog. | WeekSchedule, internal OccurrenceCard. | Deep |
+| `src/components/TaskDetails.tsx` | Secondary summary, Edit entry, delete, collapsed history; migration explanations stay here. | App wraps it in a right-aligned Dialog; TaskHistory handles records. | TaskDetails, remove; onEdit/onBusyChange callbacks coordinate modal state. | Deep |
+| `src/components/Dialog.tsx` | Native modal lifecycle, initial focus, Escape/backdrop, focus return and pending-save guard. | App uses it for Add/Edit/Details/Manage; forms opt into initial focus with a data attribute. | Dialog; showModal/close effect, stable fallbackFocus. | Deep |
+| `src/components/Icon.tsx` | Small consistent inline SVG utility icons; no external font/assets. | Header, navigation, dialogs and completion controls. | Icon (calendar, plus, chevrons, close, check). | Role |
+| `src/index.css` | Desktop light-theme tokens and reusable controls, dialogs, board, cards and history layouts. | Imported by src/main.tsx; styles renderer classes only. | CSS; narrow windows scroll the board while toolbar wraps. | Role |
 
-The Reminder refresh effect runs every minute and on window focus; it only refreshes the list. The actual notification scheduler is in Electron. Request versions keep an older list response from overwriting newer mutations. Loading/error/empty states are UI concerns, not database rules.
+App refreshes week projections every minute and on focus; this does not deliver notifications. The native scheduler has its own thirty-second timer. The week is derived from rules plus saved occurrence state, rather than persisting future weeks. TaskHistory loads a selected date range only after expansion and allows backfill, correction, and clearing actual times. recordedAt preserves first entry time while startedAt/endedAt are user-editable; duration is derived. Async request versions prevent old responses from replacing newer weeks. The old TaskList/TaskItem components were removed.
 
 ## Build, packaging, and project configuration
 
@@ -80,7 +77,7 @@ The Reminder refresh effect runs every minute and on window focus; it only refre
 | `tsconfig.electron.json` | Strict Electron/shared/desktop-config checks. | Second command in `typecheck`; includes Electron, shared types, electron-vite/Drizzle configs. | Compiler options, no emitted files. | Role |
 | `vite.config.ts` | Inherited plain-Vite configuration; not the active Electron build config. | Still included by `tsconfig.node.json`; desktop npm scripts use electron-vite instead. | Default Vite config with React plugin. | Role |
 | `eslint.config.js` | TS/React lint rules and generated-output exclusions. | `npm run lint`. | Default flat config. | Role |
-| `.gitignore` | Local/generated-file exclusion policy. Does not delete files or determine builder contents. | Git will use it after repository initialization; builder has its own `files` rules. | Ignore patterns, no exports. | Role |
+| `.gitignore` | Local/generated-file exclusion policy. Does not delete files or determine builder contents. | Git uses it; builder has its own `files` rules. | Ignore patterns, no exports. | Role |
 
 Native detail to remember: better-sqlite3 **13.0.3** ships a Windows x64 **Node-API 10** binary. `npmRebuild: false` and the npm install-script policy avoid an unnecessary compiler rebuild. Actual loading is verified under pinned Electron and again after installation. Read `docs/windows-build.md` before changing these versions or npm policy; ordinary application changes do not require understanding the binary-check implementation.
 
@@ -90,24 +87,132 @@ Resources: `resources/tray-icon.png` is loaded by main; `resources/app.ico` is t
 
 | File | Responsibility / layer | Callers and dependencies | Main functions / exports | Read |
 | --- | --- | --- | --- | --- |
-| `tests/run.cjs` | Fast test entry: launches tests under Electron's Node runtime. | `npm test`; runs the four test modules below. | `spawnSync`, exit propagation. | Role |
-| `tests/register-typescript.cjs` | Test-only TypeScript-to-CommonJS loader. | Imported by DB/Reminder/security tests; uses TypeScript. | Registers `require.extensions['.ts']`. | Role |
-| `tests/reminders.cjs` | Real SQLite/Task/Reminder validation and persistence, migration upgrades, scheduler retries/duplicates/late events. | Test runner; uses services/repos and test-only notification/timer doubles. | Two `node:test` tests. | Deep |
+| `tests/run.cjs` | Fast test entry: launches tests under Electron's Node runtime. | `npm test`; runs Task/weekly/planned-range/occurrence-lifecycle/security/database/application-lifecycle modules. | `spawnSync`, exit propagation. | Role |
+| `tests/register-typescript.cjs` | Test-only TypeScript/TSX-to-CommonJS loader. | Imported by DB/Task/security/weekly tests; uses TypeScript. | Registers .ts and .tsx loaders (React JSX runtime for server-rendered card tests). | Role |
+| `tests/tasks.cjs` | Real SQLite unified-model, history and migration tests. | npm test; services/repository/recurrence and taskScheduler. | One-time, recurring, DST, current-day, backfill/corrections, offline/delete history, restart and old-schema migration tests. | Deep |
 | `tests/database.cjs` | Initialization failure, availability, double-init guard, safe close. | Test runner; calls database lifecycle with isolated DB. | One test. | Role |
 | `tests/security.cjs` | Trusted main frame/window/URL checks; rejects other ports/paths/frames. | Test runner; exercises `createSenderValidator`. | Two tests. | Deep |
 | `tests/lifecycle.cjs` | Startup ordering/lock, navigation denial, restoration, fatal cleanup. | Test runner; transpiles main into a VM with Electron test doubles. | Internal `boot` harness; four tests. | Role |
-| `tests/windows-installed.cjs` | Actual installed-app verification, fresh userData, CRUD/restart, tray/relaunch, real minute scheduler. | `test:installed`; Playwright Core launches an installed executable. | `main`, `waitFor`; writes ignored reports/screenshots. | Role |
+| `tests/windows-installed.cjs` | Packaged/installed Electron UI QA with isolated userData and real thirty-second tick. | test:installed accepts the executable path; Playwright Core drives UI and checks native loading/security/tray/restart. | main, waitFor; writes ignored reports/screenshots. Rebuild/install current sources first. | Role |
 | `README.md` | Starting point for developer/build commands. | Human readers; links build/readiness/reminder docs. | No code exports. | Role |
-| `docs/reminders.md` | Reminder semantics, retry/time choices, Windows notification context. | Reference when changing reminder behavior; links build docs. | No code exports. | Role |
+| `docs/reminders.md` | Exact per-slot reminder windows, delivery, retries and restart policy; no separate Reminder product. | Older links redirect readers to task-scheduling.md. | No exports. | Role |
 | `docs/packaging-readiness.md` | Current architecture/readiness summary and resolved review findings. | Reference for architecture discussions; links current build guide. | No code exports. | Role |
 | `docs/windows-build.md` | Reproduction commands, native policy, artifact paths, verification, signing/manual limits. | Developers preparing/testing installers. | No code exports. | Deep before packaging |
 | `docs/superpowers/plans/2026-10-17-windows-build.md` | Completed implementation plan and decision record. | Historical reference; not an input to npm/runtime. | Checklists/completion evidence, no exports. | Role |
-| `docs/developer-walkthrough.md` | This reading map. | README/human readers; points to code above. | No code exports. | Role |
+| `docs/developer-walkthrough.md` | This reading map. | README/human readers; points to current code. | No code exports. | Role |
 
 Fast tests use controlled native-notification events; installed tests forward real notification calls. A `show` event is not visual confirmation of Windows toast appearance. Temporary instrumentation belongs in tests, not in the packaged application.
+
+## New unified-model files
+
+| File | Responsibility / layer | Callers and dependencies | Main functions / exports | Read |
+| --- | --- | --- | --- | --- |
+| `shared/scheduling/recurrence.ts` | Pure saved-zone recurrence, positive same-day five-minute validation, and compatible DST whole-gap range shifts. | Task service and shared week helper call it; pinned Temporal polyfill handles DST. | validateRecurrence, firstOccurrenceAt, generateOccurrenceTimes, occurrenceEndAt, planned-range validators, localDateAt, localDayRange. | Deep |
+| `shared/scheduling/week.ts` | Pure week navigation, local day keys, bounded rule expansion and stored-state merging by both planned endpoints. | Task service derives week DTOs; renderer groups/navigates days; tests check DST and placement. | weekRange, shiftWeek, weekDays, dayKey, expectedTimes, deriveOccurrences. | Deep |
+| `tests/weekly.cjs` | Week projection and editing regression tests, including compact imported card markup. | npm test; real isolated SQLite and React server rendering. | Week/DST, bounded browsing, merge, edit/cutover/conversion, notification preference, metadata hiding tests. | Deep |
+| `drizzle/0003_task_schedule_edits.sql` | Adds schedule_effective_at without rewriting existing expectations/completions. | Runtime migrator after 0002; metadata in meta/0003_snapshot.json. | SQL effective-boundary backfill; no TS exports. | Deep |
+| `src/components/TaskHistory.tsx` | Date-range history plus editable actual start/end times, backfill and clear. | TaskDetails expands it; calls semantic occurrence APIs, refreshes week projections. | TaskHistory, internal OccurrenceRow/save handler. | Deep |
+| `src/taskFormatting.ts` | Shared renderer date/input formatting and error text. | App, TaskForm, WeekSchedule, TaskDetails, TaskHistory. | localDateInput, localDateTimeInput, formatScheduled, errorMessage. | Role |
+| `drizzle/0002_unified_tasks.sql` | Atomic data-preserving upgrade from separate Task/Reminder tables. | Runtime migrator; preserves provenance, IDs, completion/notified distinction. | Creates unified tasks/task_occurrences, maps legacy data, drops old tables after copying. | Deep |
+| `drizzle/meta/0002_snapshot.json` | Generated 0002 unified schema metadata. | Drizzle Kit uses it when generating the next diff; keep committed. | Schema JSON. | Role |
+| `docs/task-scheduling.md` | Model, recurrence/DST, migration, notifications, editable history, future weekly metrics. | Main reference when changing Task scheduling/history. | No exports. | Deep |
+| `docs/superpowers/plans/2026-10-19-unified-tasks.md` | Refactor implementation decisions and checklist. | Historical development reference, not runtime input. | No exports. | Role |
+| `docs/superpowers/plans/2026-10-19-weekly-schedule.md` | Weekly interaction/editing decisions, implementation checklist and verification ledger. | Development reference, not runtime input. | No exports. | Role |
 
 ## What to commit versus regenerate
 
 Commit source, tests, configs, docs, resource artwork, `package.json`, `package-lock.json`, and the complete `drizzle/` history. Regenerate `node_modules/` with `npm ci`, `out/` with `npm run build`, and `release/` with `npm run build:win`. Release contents include installers, unpacked/installed copies, local SQLite test profiles, QA evidence, and builder logs; none belong in the initial source commit. `data.db` in real Electron userData is personal runtime data, not project source.
 
 When reading tomorrow, ask: can I trace one successful request and one rejected request, explain the startup/quit sequence, distinguish UI refreshing from notification scheduling, and explain why migrations are committed but the database is not? Mark unclear files and discuss those before changing architecture.
+
+## Lifecycle files added in this iteration
+
+| File | Layer and responsibility | Callers / exports | Read |
+| --- | --- | --- | --- |
+| `shared/occurrenceLifecycle.ts` | Pure derived state and duration; imported unknown-time completions are explicit. | Renderer/services/tests; `occurrenceState`, `occurrenceDuration`. | Deep |
+| `electron/services/reminderPolicy.ts` | Pure latest eligible slot/window selection. | Reminder service; `reminderSlotAt`. | Deep |
+| `electron/services/reminderService.ts` | Business eligibility, current-rule checks, claims and delivery outcomes. | Scheduler; `getDueReminders`, `claimReminder`, relevance/outcome/recovery helpers. Uses Task service and repositories. | Deep |
+| `electron/db/reminderSlotRepository.ts` | DB-only candidate/slot queries and conditional claims. | Reminder service; `findCandidates`, `getSlot`, `claimSlot`, `finishSlot`, `recoverInterruptedSlots`. | Deep |
+| `drizzle/0004_occurrence_lifecycle.sql` | Preserves IDs/planned times, maps known legacy ends, adds durable slot table. | Startup migrator; journal and `meta/0004_snapshot.json` accompany it. | Deep |
+| `tests/occurrence-lifecycle.cjs` | Lifecycle validation/duration, seven slots, failure retries, crash/restart and scheduler cleanup. | Test runner; real isolated SQLite plus controlled native events. | Deep |
+| `docs/superpowers/plans/2026-10-19-occurrence-lifecycle.md` | Lifecycle implementation decisions and validation ledger. | Developer reference only. | Role |
+
+The current board uses one compact week toolbar over a scrollable timetable with density sized for roughly eight visible hours. Add/Edit share a modal; details/history stays secondary. See [task scheduling](task-scheduling.md) for legacy exceptions and future report calculations, and [notifications](reminders.md) for seven slots and the final thirty-second grace window.
+
+## Planned-range files
+
+| File | Layer and responsibility | Callers / exports | Read |
+| --- | --- | --- | --- |
+| `src/timetableLayout.ts` | Pure viewer-local display segments, density-based geometry, connected display intersections, staggered widths, a fifteen-minute display floor and deterministic stacking. | WeekSchedule/tests; `rangeGeometry`, `splitDisplaySegments`, `layoutOverlaps`. | Deep |
+| `electron/db/migrationRanges.ts` | Exact legacy start preservation; elapsed one-time ends and recurrence wall-clock ranges capped before local midnight. | Transactional runtime migration runner calls typed conversion explicitly; `legacyPlannedEnd`, `legacyRecurrenceRange`, `legacyScheduleEnd`. | Deep |
+| `drizzle/0005_planned_ranges.sql` | Planned-start column rename, ends/task zone, recurrence JSON conversion, occurrence uniqueness across both endpoints. | Runtime migration runner; built-in SQLite SQL with explicit typed zone normalization before journal commit. Journal and `meta/0005_snapshot.json` accompany it. | Deep |
+| `tests/planned-ranges.cjs` | Planned-input validation, exact migration preservation, DST/range identity and timetable interval/geometry coverage. | Test runner; isolated SQLite and pure shared/renderer helpers. | Deep |
+
+New planned ranges use five-minute increments, end strictly after start, and stay on one saved-zone date. Unchanged imported ranges can be saved exactly. Actual start/end history keeps its original precision. A start/end pair identifies current state, so an end-only edit preserves meaningful old rows without carrying their progress onto the new range.
+
+The timetable now uses planned geometry before Start, actual start/current execution while running, and actual start/end when finished; stored planned ranges remain unchanged. Viewer-midnight display splitting keeps one occurrence identity. Display intersections form transitive staggered-width groups (width 1.05 / count: two 52.5%, three 35%); each leaves an exposed selectable strip. Short blocks render at least fifteen minutes high without changing their saved planned range. Later starts remain above earlier ones. Whole-capsule hover/focus expansion is vertically centered and transient, and mouse leave restores deterministic columns/layers. See the model guide for the fixed-grid DST-fold behavior.
+
+## Migration compatibility repair
+
+| File | Layer and responsibility | Callers / exports | Read |
+| --- | --- | --- | --- |
+| `electron/db/runtimeMigrations.ts` | Atomic Drizzle SQL/hash/journal execution plus schema-aware recovery of unjournalled0005 and explicit time-zone normalization. | database.initializeDatabase; runRuntimeMigrations. No registered SQLite JS functions. | Deep |
+| `tests/migration-compatibility.cjs` | Native SQL execution, old-rule history preservation, partial-DDL recovery and rollback regression tests. | npm test; isolated SQLite fixtures. | Deep |
+
+See [migration compatibility repair](migration-compatibility-repair.md) for the real-profile incident and preservation evidence.
+
+`tests/timetable-overlap.cjs` covers deterministic overlap layout; [timetable overlap layout](timetable-overlap.md) explains compact content, pointer/keyboard expansion and fixed geometry.
+
+| `src/components/ResetOccurrenceDialog.tsx` | Neutral Finished → Planned confirmation, Cancel focused first, pending/error handling. | WeekSchedule opens it; existing updateTaskOccurrenceTimes clears both actual times, then refreshes the week. | ResetOccurrenceDialog; understand its role. | Role |
+| `tests/card-lifecycle.cjs` | One-time/recurring reset preservation and primary/secondary card markup. | npm test; real isolated SQLite and React server rendering. | Three tests; packaged interaction QA covers clicks, cancellation and tiny cards. | Role |
+
+Current planning extension: [planning hours and occurrence editing](planning-hours-occurrence-editing.md). Read shared/scheduling/planningHours.ts (pure clock/bounds validation), electron/services/settingsService.ts (conflict rules), electron/db/settingsRepository.ts (singleton DB access), electron/ipc/settingsIpc.ts (sender-validated wiring), shared/types/settings.ts (DTO), src/components/PlanningSettings.tsx (settings form), src/timetableViewport.ts (density/current-time/scroll math), electron/window/windowSizing.ts (workArea bounds). Migration0006 and its snapshot add settings + exact-range recurrence exclusions. taskService.updateOccurrencePlan routes synced rule edits or atomic standalone replacement; taskRepository owns exclusion/insert transactions. App carries selected occurrence context; TaskForm handles Sync and duration defaults; Details/History separate planned and actual. Preload exposes only get/update planning hours, update occurrence plan and event-only onWindowShown subscription in addition to existing APIs. Understand services/projection/exclusions deeply; the settings form/window helper need only role-level familiarity.
+
+## Task categories
+
+See [category design and migration](task-categories.md). shared/taskCategories.ts defines stable keys, display metadata and validation; shared/types/task.ts carries category on Task and optional create/edit input. schema.ts + migration0007 persist it; taskService.ts validates/inherits it. TaskForm/TaskDetails/WeekSchedule use the shared definitions; index.css reserves compact emoji space without category colors. Understand the shared keys and inheritance deeply; the display mapping and generated migration snapshot only require understanding their role. tests/categories.cjs and tests/windows-categories.cjs cover data and rendered flows.
+
+The native File/Edit/View/Window menu is removed in main.ts using BrowserWindow.removeMenu; the title bar and tray menu remain. The current-time line prefixes its clock with NOW:. Current verification: 114 automated tests, TypeScript, ESLint and production build passed, plus isolated category UI/restart checks. See task-categories.md for real-database snapshot migration evidence; this verification does not imply a new NSIS installer was built.
+
+Latest card interaction: WeekSchedule renders a fixed 60px card-info-region (whole area opens details) and a remaining-height card-primary-button (Start/Finish/Reset). Native buttons are independent; the upper-right details icon is decorative and belongs to the upper region. index.css owns the full-width separator, centered action and region-only muted background/inset/left-accent feedback. timetableViewport.VISIBLE_PLANNING_MINUTES is 480. tests/windows-card-regions.cjs checks density, both click routes, reset, short/long and grouped restoration using an isolated profile.
+
+## Desktop polish: navigation, actual timing and feedback
+
+See [desktop interaction notes](desktop-polish.md) for behavior and verification. No schema, recurrence, notification or packaging change is involved.
+
+| File | Layer and responsibility | Callers / main exports | Read |
+| --- | --- | --- | --- |
+| `src/actualTimeline.ts` | Pure common-scale geometry, five-minute actual-edit snapping, range validation, local time options and derived statistics. | ActualTimelineEditor/tests; `timelineScale`, `timelineBar`, `draggedActualTime`, `actualStatistics`, `localTimeOptions`. | Deep |
+| `src/components/ActualTimelineEditor.tsx` / `.css` | Selected one-time/recurring planned/actual comparison, dates/selectors, draggable boundaries, optimistic save/rollback and focus restoration. | TaskDetails; existing `updateTaskOccurrenceTimes` bridge and parent refresh. | Deep |
+| `src/toast.ts` | Small notification context and lifecycle success message formatting. | App, cards, history, reset and actual editor callback; `useToast`, `lifecycleToast`, `TOAST_DURATION`. | Role |
+| `src/components/ToastProvider.tsx` | Bottom-right manual-popover success feedback, above native dialogs; independent 2.8-second successes and five-second Task Deleted / Undo entries. | main.tsx wraps App; no service or DB dependency. | Role |
+| `electron/window/windowGeometry.ts` | Validate/restore/save normal bounds and maximized state; recover when monitors change. | main.ts; `loadWindowGeometry`, `trackWindowGeometry`. Stores userData/window-state.json. | Role; read deeply when changing window lifecycle |
+| `tests/actual-timeline.cjs`, `tests/toasts.cjs`, `tests/window-geometry.cjs` | Pure/component/native-runtime regression checks for the new helpers. | tests/run.cjs; isolated fixtures only. | Role |
+| `tests/windows-desktop-polish.cjs` | Real Electron navigation, editing/drag/rollback, toast, keyboard and restart checks. | Explicit manual invocation; ignored release/verification profile and screenshots. | Role |
+
+Modified integration points: App keeps the timetable mounted across week navigation and gates recentering on accepted data plus current viewport geometry. WeekSchedule centers current-week navigation/This week/window-show on the current time and resets non-current weeks to the top. TaskDetails adds the shared occurrence editor and accurate soft-delete wording. TaskHistory and ResetOccurrenceDialog emit success feedback. index.css strengthens In Progress, softens Finished and adds keyboard focus styling. main.ts restores geometry before window creation and saves only after successful startup on normal quit. Service/Repository and migration responsibilities remain unchanged.
+
+Keyboard follows the confirmed two-region design: Tab to upper information opens Details with Enter/Space; Tab to lower action starts/finishes/resets. Focus alone never changes state. Saving prevents repeated actions without dropping lifecycle-button focus. Actual selectors restore focus after temporary disabling unless the user deliberately moves elsewhere.
+
+Deletion Undo: taskService.deleteTask returns TaskDeletionReceipt (shared/types/task.ts) with a five-second, one-use opaque token. undoTaskDeletion validates the token and calls repository.restoreDeletedTask, which conditionally restores the original Task notification flag without touching history/schedules/slots. taskIpc/preload/electron.d.ts expose only the semantic undoTaskDeletion API. TaskDetails passes the receipt to App, which closes Details, refreshes the schedule and registers the toast Undo callback. ToastProvider stacks entries with separate deadlines and persistent action errors. Tokens are session-local; quitting preserves deletion. Read service expiry/conditional restoration deeply; UI wiring needs role-level understanding. tests/deletion-undo.cjs and tests/windows-deletion-undo.cjs verify persistence and real UI flows.
+
+## Actual-first display and recurring correction
+
+| File | Layer and responsibility | Callers / exports | Read |
+| --- | --- | --- | --- |
+| `shared/scheduling/occurrenceDisplay.ts` | Pure lifecycle-based display range selection; never modifies planned identity. | Task service week filtering and renderer; `occurrenceDisplayRange`. | Deep |
+| `src/timetableLayout.ts` | Splits the selected display range at viewer midnight and clips it to the visible week. | WeekSchedule/tests; `splitOccurrenceDisplaySegments` in addition to the existing primitives. | Deep |
+| `tests/actual-scheduling.cjs` | Actual geometry, recurring editor/statistics, exact history/slot transfer, rollback, virtual exclusion and database reopen regressions. | npm test, isolated SQLite/React rendering. | Role |
+| `tests/windows-actual-scheduling.cjs` | Recurring-only manager, Actual editor detachment, follow-up Details, actual card geometry, larger toast and restart UI checks. | Explicit invocation, ignored isolated release/verification profile. | Role |
+
+Modified paths: taskService.correctOccurrenceTimes validates the visual correction; taskRepository.detachOccurrenceWithActual owns the exclusion + new Task + original history-row transfer transaction. listActualOccurrences supplies week candidates outside their planned week; the service rejects obsolete-rule candidates. taskIpc/preload/electron.d.ts expose correctTaskOccurrenceTimes narrowly. ActualTimelineEditor accepts an optional save operation and onDetached callback; TaskDetails selects it for recurring tasks, and App follows the resulting Task ID. App lists only recurring definitions in Manage recurring tasks. WeekSchedule uses actual display ranges for geometry/overlap and keeps planned timestamps for identity/actions. index.css enlarges all success/Undo toasts. Understand the display selector, service branching and transaction deeply; UI wiring needs role-level familiarity. No schema or migration changed.
+
+## Unified Task Details editing
+
+TaskDetails now composes one information area inside ActualTimelineEditor using its `information` and `beforeTiming` slots. TaskForm has read-only text and inline autosave modes, reusing the same planned-schedule validation. An Edit switch above the time summary/statistics toggles metadata inputs in place; there is no separate Edit Task dialog. Input pauses of 400ms autosave, saves serialize without disabling typing, and turning Edit off flushes the latest draft. Invalid values keep Edit on with inline errors. There are no inline Save/Cancel buttons. The Add form is unchanged. Actual dragging/selectors remain available independently in both modes; statistics stay derived. App removes the old edit view and preserves selected occurrence context across metadata-only updates. index.css and ActualTimelineEditor.css remove the nested panel border and tighten information spacing. tests/details-edit.cjs and tests/windows-details-edit.cjs cover markup, live saves, focus, slow requests, closing, errors and independent Actual editing. Read the autosave version/queue logic deeply; the presentation slots need role-level understanding. No service/repository/schema changes were needed.
+
+Completed/started one-time planning correction: TaskForm now locks only Schedule type, keeping planned Date/Start Time/End Time enabled. taskService.updateTask branches to taskRepository.correctOneTimePlan for progressed one-time records; one transaction updates the Task plan and its current occurrence planned endpoints, preserving actual/audit/slot identity. Other historical rows stay untouched, and duplicate-range conflicts roll back. ActualTimelineEditor now places EndpointSelector controls on both sides of the shared central track; its existing Actual state synchronizes selects and handles. ActualTimelineEditor.css owns the three-column alignment. tests/actual-scheduling.cjs covers preservation and rollback; tests/windows-completed-plan.cjs covers the rendered/edit interactions. No schema/migration change.
+
+ActualEndpointControl.tsx is the renderer-only compact endpoint button: click/keyboard opens native date/time options; a 200ms pointer hold delegates drag start/move/release/cancel to ActualTimelineEditor. It separates clicks from drags, cleans pending hold timers and respects disabled/latest state. ActualTimelineEditor translates side-button coordinates into track coordinates, then reuses its existing snapping, day limits, edge expansion, rollback and semantic save path. Understand pointer ownership/cancellation deeply; the popover styling only needs role-level familiarity. tests/windows-actual-buttons.cjs verifies the combined gesture in an isolated profile.
+
+ActualTimelineEditor now anchors ActualEndpointControl beneath each corresponding handle using the shared timelinePosition percentage; their layout space is reserved in ActualTimelineEditor.css. Start/end controls extend away from each other to avoid overlap at zero/short durations. ActualEndpointControl repositions its open popover when its value changes. Planned labels/times remain fixed read-only text. Existing click/hold, snapping, save and cancellation paths are reused; tests/details-edit.cjs and tests/windows-actual-buttons.cjs check the anchored geometry and interactions.

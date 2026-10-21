@@ -25,6 +25,7 @@
     "build:win": "npm run verify:native && npm run build && electron-builder --win nsis --x64"
   },
   "dependencies": {
+    "@js-temporal/polyfill": "0.5.1",
     "better-sqlite3": "13.0.3",
     "drizzle-orm": "^0.45.4",
     "react": "^19.2.8",

@@ -1,29 +1,26 @@
-import type { Task } from "../shared/types/task";
-import type { CreateReminderInput, Reminder } from "../shared/types/reminder";
-
+import type { TaskDeletionReceipt, OccurrenceTarget, UpdateOccurrenceTimesInput, UpdateOccurrencePlanInput, CreateTaskInput, Task, TaskOccurrence, WeekSchedule } from "../shared/types/task";
+import type { PlanningHours } from "../shared/types/settings";
 export {};
 
 declare global {
     interface Window {
         electronAPI: {
-            listReminders: () => Promise<Reminder[]>;
-            createReminder: (input: CreateReminderInput) => Promise<Reminder>;
-            deleteReminder: (id: number) => Promise<void>;
-
+            getPlanningHours: () => Promise<PlanningHours>;
+            updatePlanningHours: (input: PlanningHours) => Promise<PlanningHours>;
+            updateTaskOccurrencePlan: (input: UpdateOccurrencePlanInput) => Promise<Task>;
+            onWindowShown: (callback: () => void) => () => void;
             listTasks: () => Promise<Task[]>;
-
-            createTask: (
-                title: string
-            ) => Promise<Task>;
-
-            updateTaskCompleted: (
-                id: number,
-                completed: boolean
-            ) => Promise<Task | undefined>;
-
-            deleteTask: (
-                id: number
-            ) => Promise<void>;
+            createTask: (input: CreateTaskInput) => Promise<Task>;
+            updateTask: (id: number, input: CreateTaskInput) => Promise<Task>;
+            getWeekSchedule: (from: number, to: number) => Promise<WeekSchedule>;
+            deleteTask: (id: number) => Promise<TaskDeletionReceipt>;
+            undoTaskDeletion: (token: string) => Promise<void>;
+            setTaskEnabled: (id: number, enabled: boolean) => Promise<void>;
+            listTaskOccurrences: (id: number, from: number, to: number) => Promise<TaskOccurrence[]>;
+            startTaskOccurrence: (input: OccurrenceTarget) => Promise<TaskOccurrence>;
+            endTaskOccurrence: (input: OccurrenceTarget) => Promise<TaskOccurrence>;
+            correctTaskOccurrenceTimes: (input: UpdateOccurrenceTimesInput) => Promise<TaskOccurrence>;
+            updateTaskOccurrenceTimes: (input: UpdateOccurrenceTimesInput) => Promise<TaskOccurrence>;
         };
     }
 }

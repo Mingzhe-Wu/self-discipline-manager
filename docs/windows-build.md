@@ -1,5 +1,11 @@
 # Windows local-test build
 
+> Current-source update (2026-10-19): the product uses unified scheduled Tasks and occurrence history in a weekly UI; see [the data-model guide](task-scheduling.md). There are six runtime migrations, the pinned Temporal production dependency, and ten semantic Task APIs. Week rendering derives bounded occurrences without persisting future weeks; schedule editing preserves history. The installer/hash/installed evidence described below is the historical foundation build; the current refactor verifies a fresh unpacked Windows package, not a replacement NSIS installer. Run `npm run build:win` and install that new artifact before testing an installed copy.
+
+Current refactor checks: TypeScript, ESLint, all 71 tests, production build, native verification and `pack:win`. Packaged verification uses `npm run test:installed -- "release/win-unpacked/Self Discipline Manager.exe"` with isolated data and exercises the polished weekly UI, shared Add/Edit dialogs and focus guards, loading/error recovery, Start/End, actual-time backfill/correction/clear, filters, 1280px/600px/320px layouts, full restart and a real thirty-second notification tick. Evidence is recorded under `release/verification/` (latest successful run in `latest.json`); screenshots include `weekly-desktop.png`, `weekly-narrow.png`, `add-task.png`, `task-history.png` and loading/empty/error states. No normal userData is migrated during QA. All subsequent installer hashes and installed-copy evidence in this document describe the earlier foundation build.
+
+Current planned-range QA passed: `release/verification/installed-RtXJ4J/result.json` (also referenced by `latest.json`), with one native notification attempt/show and zero failures. It covers exact timetable geometry, overlapping-card hover/full-surface clicks/keyboard access, inner lifecycle controls and five-minute cards, plus the existing history/security/tray/restart checks. Native toast appearance and physical tray-menu clicks remain manual checks. The NSIS installer was not rebuilt during this iteration.
+
 Version 0.1.0 is an **unsigned Windows x64 NSIS installer**. The React → preload → IPC → service → repository → Drizzle → SQLite architecture is preserved.
 
 ## Build commands
@@ -85,9 +91,9 @@ Playwright Core 1.62.1 is a development dependency for Electron automation; it d
 - Exercise the visible tray Open/Quit menu, installer wizard, Start Menu/Desktop shortcut launches, and uninstall behavior manually. Automated verification covered tray presence and close/relaunch behavior, not physical clicks on the system tray menu.
 - Test on another clean Windows x64 machine. The installed app was tested on this Windows machine; no VM/second-machine test was performed.
 - Keep the first build local/unsigned; add signing and update/distribution policy before a public release. No cloud/updater backend is configured.
-- Delivery is not exactly once across a crash between native display and SQLite acknowledgement. The one-minute polling and current reminder behavior are unchanged.
+- Delivery cannot be exactly once across a crash between native display and SQLite acknowledgement. Successful slots persist; interrupted sending claims become unknown and are skipped. Polling stays once per minute; only the latest relevant reminder window is considered (see reminders.md).
 
-## Files changed and dependencies added
+## Historical foundation files changed and dependencies added
 
 - Packaging/install policy: `package.json`, `package-lock.json`, `electron-builder.json`, `.gitignore`, `eslint.config.js`, `resources/app.ico`, `scripts/verify-native.cjs`.
 - Startup/security: `electron/main.ts`, `electron/db/database.ts`, `electron/ipc/taskIpc.ts`, `electron/ipc/reminderIpc.ts`, `electron/ipc/validateSender.ts`, `electron.vite.config.ts`, `index.html`.
@@ -96,3 +102,19 @@ Playwright Core 1.62.1 is a development dependency for Electron automation; it d
 - Direct packages added: development-only `electron-builder@26.15.3` and `playwright-core@1.62.1`. Existing Electron and better-sqlite3 versions were pinned, not replaced.
 
 A focused independent code review found no substantive blocker for local unsigned testing. Disposable dependency-install trees and failed test harness profiles were removed after recording successful evidence. No test-only hooks or notification stubs were added to application code.
+
+Migration0005 compatibility repair: fresh unpacked app was rebuilt and successfully started against the original user profile after snapshot verification. No NSIS rebuild. See [repair evidence](migration-compatibility-repair.md).
+
+The overlap-layout iteration verifies a separate unpacked build under release/overlap-qa because the usual output directory was locked. It uses disposable QA profiles and does not open the real userData. Shared-boundary columns and temporary capsule expansion are described in [timetable overlap layout](timetable-overlap.md). No NSIS rebuild.
+
+Latest overlap QA passed: release/verification/installed-F1jXXs/result.json; two/three/four-column transitive grouping, compact pointer/keyboard interaction, full-capsule hover, exact mouse-leave restoration, containment/partial stacking, lifecycle/history/restart and native scheduler checks. Screenshots: overlap-default.png, overlap-hover.png, overlap-restored.png.
+
+The standard release/win-unpacked output was restored from the verified QA package using in-place file copying after the directory-rename failure. Its ASAR hash matches, and all138 package files were checked against the QA build. Temporary root-level package copies were removed; source resources remain intact.
+
+Card lifecycle interaction QA (2026-10-20): release/card-lifecycle-final-qa/win-unpacked verified using an isolated profile; evidence release/verification/installed-DL0zCf/result.json. Card-body Start/End, Finished reset confirmation/cancel, actual-time clearing with planned-range/ID preservation, details isolation, double-click suppression, keyboard and tiny hit targets passed, alongside tray/single-instance/restart/native-notification checks. TypeScript, ESLint, production build and all 74 tests passed. No NSIS rebuild or real userData access.
+
+Card affordance QA (2026-10-20): release/card-affordance-edge-qa/win-unpacked; evidence release/verification/installed-OSNJa5/result.json. 75/75 tests, TypeScript, ESLint and production build passed. Isolated Electron QA verified gray/blue/green states, body-hover and keyboard action hints, unchanged title/geometry, details isolation, compact groups, short preview hit targets, midnight sticky-heading avoidance, reset/cancel, persistence/tray/native scheduler and 1280px/600px/320px layouts. Browser plugin unavailable, so existing Playwright Electron harness used. Archive extraction hit a Windows EPERM rename; QA packaging succeeded with --config.electronDist=node_modules/electron/dist (matching installed Electron44.9.0), without config changes. No NSIS rebuild or real userData access.
+
+Pressable hover QA: release/card-pressable-qa/win-unpacked verified with isolated profiles; evidence release/verification/installed-tCEOmA/result.json. TypeScript, ESLint, production build and 75/75 tests passed. Electron UI checks confirm bordered action chips, pressed inset feedback, press-drag-away cancellation without lifecycle mutation, unchanged geometry, details isolation, all lifecycle/reset/history scenarios, compact/short/midnight previews, persistence, tray/single-instance and native scheduler. No real userData access or NSIS rebuild.
+
+Planning-hours/occurrence-editing QA: final unpacked build release/planning-viewport-qa/win-unpacked. New UI suite passed at release/verification/planning-ui-ITZrVz/result.json; existing regression and real native notification checks passed at release/verification/installed-Scdnvz/result.json. WorkArea-fit bounds, ten-hour adaptive density, current-time line/today, no timer recentering, window-show centering, wake/sleep persistence/conflicts, SyncON/OFF/history, duration defaults, deletion confirmation, narrow layout and restart covered. No NSIS rebuild or real userData access.

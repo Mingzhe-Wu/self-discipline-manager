@@ -1,28 +1,36 @@
-import { app, BrowserWindow, dialog, Menu, Tray } from "electron";
+import { app, BrowserWindow, dialog, Menu, screen, Tray } from "electron";
 import path from "node:path";
 import { closeDatabase, initializeDatabase } from "./db/database";
 import { registerTaskIpc } from "./ipc/taskIpc";
-import { registerReminderIpc } from "./ipc/reminderIpc";
 import { createSenderValidator } from "./ipc/validateSender";
-import { startReminderScheduler, stopReminderScheduler } from "./scheduler/reminderScheduler";
+import { startTaskScheduler, stopTaskScheduler } from "./scheduler/taskScheduler";
+
+import { registerSettingsIpc } from "./ipc/settingsIpc";
+import { defaultWindowBounds } from "./window/windowSizing";
+import { loadWindowGeometry, trackWindowGeometry } from "./window/windowGeometry";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let fatalErrorReported = false;
 let rendererUrl: string;
+let startupComplete = false;
+let saveWindowGeometry: (() => void) | undefined;
 
 function showMainWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
+    const wasVisible = mainWindow.isVisible();
     mainWindow.show();
     mainWindow.focus();
+    if (wasVisible) mainWindow.webContents.send("app:shown");
 }
 
 async function createWindow() {
+    const geometryFile = path.join(app.getPath("userData"), "window-state.json");
+    const geometry = loadWindowGeometry(geometryFile, screen.getAllDisplays().map((display) => display.workArea), defaultWindowBounds(screen.getPrimaryDisplay().workArea));
     const window = new BrowserWindow({
-        width: 1000,
-        height: 700,
+        ...geometry.bounds,
         webPreferences: {
             preload: path.join(app.getAppPath(), "out", "preload", "index.mjs"),
             contextIsolation: true,
@@ -30,7 +38,11 @@ async function createWindow() {
             sandbox: false, // ESM preload requires an unsandboxed preload context.
         },
     });
+    window.removeMenu();
+    saveWindowGeometry = trackWindowGeometry(window, geometryFile, screen);
+    if (geometry.maximized) window.maximize();
     mainWindow = window;
+    window.on("show", () => window.webContents.send("app:shown"));
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => event.preventDefault());
     window.webContents.on("will-redirect", (event) => event.preventDefault());
@@ -60,7 +72,7 @@ function createTray() {
 }
 
 function cleanup() {
-    stopReminderScheduler();
+    stopTaskScheduler();
     closeDatabase();
     tray?.destroy();
     tray = null;
@@ -90,6 +102,7 @@ if (!app.requestSingleInstanceLock()) {
     app.on("second-instance", showMainWindow);
     app.on("before-quit", () => {
         isQuitting = true;
+        if (startupComplete && !fatalErrorReported) saveWindowGeometry?.();
         cleanup();
     });
 
@@ -107,11 +120,12 @@ if (!app.requestSingleInstanceLock()) {
         );
         const validateSender = createSenderValidator(() => mainWindow, rendererUrl);
         registerTaskIpc(validateSender);
-        registerReminderIpc(validateSender);
+        registerSettingsIpc(validateSender);
         await createWindow();
         if (isQuitting) return;
         createTray();
-        startReminderScheduler();
+        startTaskScheduler();
+        startupComplete = true;
         app.on("activate", () => {
             if (!mainWindow) void createWindow().catch(reportFatalError);
             else showMainWindow();

@@ -26,6 +26,13 @@ export default defineConfig({
     renderer: {
         root: ".",
 
+        server: {
+            watch: {
+                // Packaged binaries and isolated QA profiles can be locked on Windows.
+                ignored: ["**/release/**"],
+            },
+        },
+
         plugins: [
             {
                 name: "development-csp",

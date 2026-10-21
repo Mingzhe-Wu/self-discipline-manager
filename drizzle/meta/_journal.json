@@ -15,6 +15,48 @@
       "when": 1792300199930,
       "tag": "0001_sweet_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792456701893,
+      "tag": "0002_unified_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792456701894,
+      "tag": "0003_task_schedule_edits",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792456701895,
+      "tag": "0004_occurrence_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792456701896,
+      "tag": "0005_planned_ranges",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792526908902,
+      "tag": "0006_occurrence_planning",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792530373167,
+      "tag": "0007_task_categories",
+      "breakpoints": true
     }
   ]
 }

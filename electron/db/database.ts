@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { runRuntimeMigrations } from "./runtimeMigrations";
+
 
 let db: ReturnType<typeof drizzle> | undefined;
 let connection: Database.Database | undefined;
@@ -14,8 +15,9 @@ export function initializeDatabase(
     }
     const sqlite = new Database(dbPath);
     try {
+        sqlite.pragma("foreign_keys = ON");
         const initialized = drizzle(sqlite);
-        migrate(initialized, { migrationsFolder });
+        runRuntimeMigrations(sqlite, migrationsFolder);
         connection = sqlite;
         db = initialized;
     } catch (error) {

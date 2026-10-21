@@ -34,3 +34,11 @@ test('development IPC accepts the configured URL and rejects another local port 
         assert.throws(() => validate({ sender: webContents, senderFrame: mainFrame }), /Untrusted IPC sender/);
     }
 });
+
+test('window-shown subscription exposes no Electron event and removes exactly its own listener',()=>{
+ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript');let bridge,listener,removed;
+ const electron={contextBridge:{exposeInMainWorld:(_name,value)=>bridge=value},ipcRenderer:{on:(channel,fn)=>{assert.equal(channel,'app:shown');listener=fn;},removeListener:(channel,fn)=>{removed={channel,fn};},invoke(){}}};
+ const source=ts.transpileModule(fs.readFileSync(path.resolve('electron/preload.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2023}}).outputText;
+ vm.runInNewContext(source,{require:(name)=>{assert.equal(name,'electron');return electron;},exports:{}});
+ let args;const unsubscribe=bridge.onWindowShown((...values)=>args=values);listener({sender:'must stay private'},123);assert.equal(args.length,0);unsubscribe();assert.equal(removed.channel,'app:shown');assert.equal(removed.fn,listener);assert.equal(bridge.ipcRenderer,undefined);
+});

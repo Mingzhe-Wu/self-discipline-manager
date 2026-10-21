@@ -1,0 +1,59 @@
+.actual-timeline-editor { border: 1px solid var(--border, #dbe1e8); border-radius: 14px; padding: 16px; background: var(--surface, #fff); min-width: 0; }
+.actual-timeline-editor.is-integrated { border: 0; border-radius: 0; padding: 0; background: transparent; }
+.actual-timeline-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.actual-timeline-heading h4 { margin: 0; font-size: 14px; }
+.actual-timeline-heading > span, .actual-range-label, .actual-empty-label { color: var(--text-muted, #64748b); font-size: 11px; }
+.actual-timeline-chart { display: grid; gap: 8px; padding: 14px 4px 0; margin-bottom: 14px; border-top: 1px solid var(--border, #dbe1e8); }
+.actual-range-controls { display: grid; grid-template-columns: 122px minmax(100px, 1fr) 122px; align-items: center; gap: 8px 10px; }
+.actual-planned-endpoint { display: grid; gap: 6px; min-width: 0; }
+.actual-planned-endpoint:has([aria-label="Planned end"]) { text-align: right; }
+.actual-planned-endpoint:has([aria-label="Planned end"]) .actual-planned-time { justify-content: flex-end; }
+.actual-planned-time { display: flex; align-items: center; min-height: 34px; padding: 6px 9px; box-sizing: border-box; color: var(--text-muted, #64748b); font-size: 12px; font-variant-numeric: tabular-nums; }
+.actual-center-control { display: grid; gap: 6px; min-width: 0; }
+.actual-center-control > .actual-row-label { text-align: center; }
+.actual-interactive-track { padding-bottom: 64px; }
+.actual-attached-endpoint { position: absolute; top: 36px; width: 110px; z-index: 2; }
+.actual-attached-endpoint.is-start { transform: translateX(calc(-100% - 3px)); }
+.actual-attached-endpoint.is-start .actual-endpoint-label { text-align: right; }
+.actual-attached-endpoint.is-end { transform: translateX(3px); }
+.actual-attached-endpoint::before { content: ''; position: absolute; top: -8px; height: 8px; width: 1px; background: #9cb3c9; }
+.actual-attached-endpoint.is-start::before { right: -3px; }
+.actual-attached-endpoint.is-end::before { left: -3px; }
+.actual-row-label { font-size: 12px; font-weight: 600; }
+.actual-timeline-track { position: relative; height: 30px; border-radius: 5px; background: #f5f7fa; }
+.actual-planned-bar, .actual-recorded-bar { position: absolute; top: 8px; height: 14px; border-radius: 4px; }
+.actual-planned-bar { background: #b5bcc6; }
+.actual-recorded-bar { background: #b4d8ff; border: 1px solid #78b5eb; }
+.actual-empty-label { display: flex; height: 100%; align-items: center; padding-left: 9px; }
+.actual-range-label { margin: 0; overflow-wrap: anywhere; }
+.actual-time-summary { display: grid; gap: 8px; }
+.actual-range-label strong { display: inline-block; min-width: 54px; margin-right: 8px; color: var(--text, #1e293b); font-weight: 600; }
+.actual-timeline-editor .actual-drag-handle { position: absolute; top: 2px; width: 18px; height: 26px; min-height: 26px; min-width: 0; padding: 0; border-radius: 5px; border: 2px solid #4989c4; background: #e3f1ff; transform: translateX(-50%); cursor: ew-resize; touch-action: none; user-select: none; z-index: 1; box-shadow: none; }
+.actual-timeline-editor .actual-drag-handle::after { content: ''; position: absolute; width: 2px; height: 12px; top: 5px; left: 6px; background: #4989c4; }
+.actual-timeline-editor .actual-drag-handle.is-start { transform: translateX(-100%); }
+.actual-timeline-editor .actual-drag-handle.is-end { transform: translateX(0); }
+.actual-timeline-editor .actual-drag-handle:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; z-index: 2; }
+.actual-timeline-editor .actual-drag-handle:disabled { cursor: default; opacity: .55; }
+.actual-timeline-statistics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 18px 0; font-size: 12px; }
+.actual-timeline-statistics dt { color: var(--text-muted, #64748b); font-size: 11px; margin-bottom: 3px; }
+.actual-timeline-statistics dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.actual-duration-difference { grid-column: 1 / -1; }
+.actual-timeline-editor .actual-endpoint { border: 0; padding: 0; margin: 0; min-width: 0; }
+.actual-endpoint-control { display: grid; gap: 6px; min-width: 0; }
+.actual-endpoint-label { font-size: 11px; font-weight: 600; }
+.actual-endpoint-button { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-width: 0; min-height: 34px; padding: 6px 9px; font-size: 12px; color: #315a7d; border: 1px solid #b9ccdd; border-radius: 6px; background: #f0f6fc; touch-action: none; user-select: none; }
+.actual-endpoint-button > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.actual-endpoint-button:hover { background: #e5eff9; border-color: #8cabc6; }
+.actual-endpoint-button.is-dragging { cursor: ew-resize; background: #dceafa; border-color: #4989c4; }
+.actual-endpoint-popover { position: fixed; inset: auto; margin: 0; width: 220px; max-width: calc(100vw - 24px); padding: 12px; box-sizing: border-box; border: 1px solid #c5d3e0; border-radius: 8px; background: #fff; color: inherit; box-shadow: 0 6px 22px #15253626; }
+.actual-endpoint-popover .actual-endpoint { border: 0; padding: 0; margin: 0; min-width: 0; }
+.actual-endpoint-popover .actual-endpoint-inputs input, .actual-endpoint-popover .actual-endpoint-inputs select { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #cfd9e4; border-radius: 5px; font-size: 12px; background: #fff; color: inherit; }
+.actual-endpoint legend { font-size: 11px; font-weight: 600; margin-bottom: 6px; }
+.actual-endpoint-inputs { display: grid; gap: 6px; }
+.actual-endpoint-inputs label { min-width: 0; }
+.actual-timeline-editor .actual-endpoint-inputs input, .actual-timeline-editor .actual-endpoint-inputs select { width: 100%; min-width: 0; box-sizing: border-box; font-size: 11px; padding: 6px; border-radius: 7px; border: 1px solid var(--border, #dbe1e8); background: var(--surface, #fff); color: inherit; }
+.actual-editor-footer { margin-top: 10px; }
+.actual-editor-footer .form-hint { font-size: 11px; margin: 0 0 5px; }
+.actual-timeline-error { border: 1px solid #eeadb3; background: #fff0f0; color: #a11b2c; border-radius: 8px; padding: 10px; font-size: 12px; margin: 12px 0 0; }
+.actual-save-status { margin: 8px 0 0; color: #376f9f; font-size: 12px; }
+@media (max-width: 520px) { .actual-range-controls { grid-template-columns: 100px minmax(72px, 1fr) 100px; gap: 8px; } .actual-attached-endpoint { width: 90px; } }
