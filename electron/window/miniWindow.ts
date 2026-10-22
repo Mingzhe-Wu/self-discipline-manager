@@ -17,6 +17,7 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
     let drag: { x: number; y: number; pointerX: number; pointerY: number } | null = null;
     let resize: { edge: MiniResizeEdge; pointer: MiniPointer; bounds: Electron.Rectangle; area: Electron.Rectangle } | null = null;
     let previewOrigin: { bounds: Electron.Rectangle; state: MiniWindowState } | null = null;
+    let ballMenuOpen = false;
     const areas = () => screen.getAllDisplays().map(display => display.workArea);
     const size = () => state.mode === "expanded" ? panelSize : { width: state.mode === "docked" ? 32 : 56, height: 56 };
     const getState = (): MiniWindowState => ({ ...state });
@@ -65,9 +66,9 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
         expand(); state = { ...state, edge: previewOrigin.state.edge, preview: true }; emit();
     }
     function endPreview() {
-        if (!state.preview || !previewOrigin) return;
+        if (!state.preview || !previewOrigin || drag || ballMenuOpen) return;
         const origin = previewOrigin; previewOrigin = null; state = origin.state;
-        place(origin.bounds); emit();
+        place(origin.bounds); emit(); dock();
     }
     function collapse() {
         if (!window || window.isDestroyed()) return;
@@ -84,10 +85,10 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
     const stopObserving = observeFullscreen(active => {
         const wasFullscreen = fullscreen;
         fullscreen = active;
-        if (active) { endPreview(); drag = null; resize = null; window?.hide(); }
+        if (active) { ballMenuOpen = false; drag = null; endPreview(); resize = null; window?.hide(); }
         else if (wasFullscreen) reveal();
     });
-    function hide() { endPreview(); wantsVisible = false; ++visibilityRevision; drag = null; resize = null; if (window && !window.isDestroyed()) { save(); window.hide(); } }
+    function hide() { ballMenuOpen = false; drag = null; endPreview(); wantsVisible = false; ++visibilityRevision; resize = null; if (window && !window.isDestroyed()) { save(); window.hide(); } }
     async function show() {
         if (disposed) return;
         wantsVisible = true;
@@ -131,8 +132,17 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
     return {
         getWindow: () => window, getState, preview, endPreview, expand, collapse,
         showBallMenu() {
-            if (!window || window.isDestroyed() || !window.isVisible() || state.mode === "expanded") return;
-            Menu.buildFromTemplate([{ id: "close-mini-ball", label: "Close floating ball", click: hide }]).popup({ window });
+            if (!window || window.isDestroyed() || !window.isVisible() || ballMenuOpen || (state.mode === "expanded" && !state.preview)) return;
+            const menu = Menu.buildFromTemplate([{ id: "close-mini-ball", label: "Close floating ball", click: hide }]);
+            ballMenuOpen = true;
+            try {
+                menu.popup({ window, callback: () => {
+                    ballMenuOpen = false;
+                    if (!window || window.isDestroyed() || !state.preview) return;
+                    const pointer = screen.getCursorScreenPoint(), bounds = window.getBounds();
+                    if (pointer.x < bounds.x || pointer.x >= bounds.x + bounds.width || pointer.y < bounds.y || pointer.y >= bounds.y + bounds.height) endPreview();
+                } });
+            } catch (error) { ballMenuOpen = false; throw error; }
         },
         beginResize(edge: MiniResizeEdge, pointer: MiniPointer) {
             if (!["n", "s", "e", "w", "ne", "nw", "se", "sw"].includes(edge)) throw new Error("Invalid resize edge");
@@ -150,14 +160,31 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
         },
         endResize() { resize = null; save(); },
         beginDrag() {
-            if (!window || window.isDestroyed() || state.mode !== "ball") return;
-            const bounds = window.getBounds(), pointer = screen.getCursorScreenPoint();
-            drag = { x: bounds.x, y: bounds.y, pointerX: pointer.x, pointerY: pointer.y };
+            if (!window || window.isDestroyed() || (state.mode === "expanded" && !state.preview) || drag) return;
+            const pointer = screen.getCursorScreenPoint();
+            const origin = window.getBounds();
+            // Move an existing preview as one window instead of collapsing it.
+            drag = { x: origin.x, y: origin.y, pointerX: pointer.x, pointerY: pointer.y };
+            if (state.mode === "docked") {
+                const bounds = window.getBounds(), edge = state.edge;
+                state = { mode: "ball", edge: null };
+                place({ x: edge === "right" ? bounds.x + bounds.width - 56 : bounds.x, y: bounds.y });
+                emit();
+            }
+            const bounds = window.getBounds();
+            drag.x = bounds.x; drag.y = bounds.y;
         },
         moveDrag() {
             if (!drag) return;
             const pointer = screen.getCursorScreenPoint();
             place({ x: drag.x + pointer.x - drag.pointerX, y: drag.y + pointer.y - drag.pointerY });
+            if (previewOrigin && window && !window.isDestroyed()) {
+                const bounds = window.getBounds();
+                previewOrigin = {
+                    state: { mode: "ball", edge: null },
+                    bounds: fitMiniBounds({ x: state.edge === "left" ? bounds.x : bounds.x + bounds.width - 56, y: bounds.y + bounds.height - 56 }, areas(), { width: 56, height: 56 }),
+                };
+            }
         },
         endDrag() { drag = null; dock(); save(); },
         isVisible: () => !!window && !window.isDestroyed() && window.isVisible(), show, hide,

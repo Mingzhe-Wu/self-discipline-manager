@@ -10,14 +10,16 @@ import MiniResizeGrips from "./MiniResizeGrips";
 import MiniDayTimetable from "./MiniDayTimetable";
 
 export default function MiniView() {
+    const [clockNow, setClockNow] = useState(Date.now);
+    useEffect(() => { const timer = window.setInterval(() => setClockNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
     const [dayView, setDayView] = useState(false);
     const [windowState, setWindowState] = useState<MiniWindowState>({ mode: "ball", edge: null });
     const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const cancelPeek = () => { if (peekTimer.current) clearTimeout(peekTimer.current); peekTimer.current = null; };
+    const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const cancelLeave = () => { if (leaveTimer.current) clearTimeout(leaveTimer.current); leaveTimer.current = null; };
     useEffect(() => () => { if (peekTimer.current) clearTimeout(peekTimer.current); if (leaveTimer.current) clearTimeout(leaveTimer.current); }, []);
-    const gesture = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+    const gesture = useRef<{ x: number; y: number; moved: boolean; active: boolean } | null>(null);
     useEffect(() => {
         let active = true;
         const unsubscribe = window.miniAPI.onWindowStateChanged(state => { if (active) setWindowState(state); });
@@ -81,16 +83,15 @@ export default function MiniView() {
             aria-label="Expand Today mini view" title={ballTask ? `${ballTask.title} — click to expand; drag to dock` : "Today — click to expand; drag to dock"}
             onPointerEnter={() => {
                 cancelLeave(); cancelPeek();
-                if (windowState.mode !== "expanded" && !gesture.current) peekTimer.current = setTimeout(() => { peekTimer.current = null; void control(window.miniAPI.preview); }, 250);
+                if (windowState.mode !== "expanded" && !gesture.current) peekTimer.current = setTimeout(() => { peekTimer.current = null; void control(window.miniAPI.preview); }, 500);
             }}
             onPointerLeave={cancelPeek}
-            onContextMenu={event => { cancelPeek(); event.preventDefault(); void control(window.miniAPI.showBallMenu); }}
+            onContextMenu={event => { cancelPeek(); event.preventDefault(); event.stopPropagation(); cancelLeave(); void control(window.miniAPI.showBallMenu); }}
             onPointerDown={event => {
                 if (event.button !== 0) return;
-                cancelPeek();
-                if (windowState.mode !== "ball") { gesture.current = null; return; }
+                cancelPeek(); cancelLeave();
                 event.currentTarget.setPointerCapture(event.pointerId);
-                gesture.current = { x: event.screenX, y: event.screenY, moved: false };
+                gesture.current = { x: event.screenX, y: event.screenY, moved: false, active: true };
                 void control(window.miniAPI.beginDrag);
             }}
             onPointerMove={event => {
@@ -101,23 +102,23 @@ export default function MiniView() {
             }}
             onPointerUp={event => {
                 if (event.button !== 0) return;
+                if (gesture.current) gesture.current.active = false;
                 void control(window.miniAPI.endDrag);
                 // Keep the gesture until click so dragging never expands the ball.
             }}
             onPointerCancel={() => { gesture.current = null; void control(window.miniAPI.endDrag); }}
             onClick={() => {
+                cancelPeek();
                 const dragged = gesture.current?.moved; gesture.current = null;
                 if (!dragged) void control(window.miniAPI.expand);
             }}>
             <span aria-hidden="true">{windowState.mode === "docked" ? (windowState.edge === "left" ? "›" : "‹") : ballTask ? categoryMetadata(ballTask.category).emoji : "◷"}</span>
         </button>;
-    if (windowState.mode !== "expanded") return ball;
-    return <div className={windowState.preview ? `mini-preview${windowState.edge === "left" ? " is-left" : ""}` : "mini-expanded"}
-        onPointerEnter={cancelLeave}
-        onPointerLeave={() => { cancelLeave(); if (windowState.preview) leaveTimer.current = setTimeout(() => { leaveTimer.current = null; void control(window.miniAPI.endPreview); }, 200); }}>
-        <main className="mini-shell" onPointerDownCapture={() => { if (windowState.preview) { cancelLeave(); void control(window.miniAPI.expand); } }}>
+    return <div onPointerEnter={cancelLeave} onPointerMove={cancelLeave} className={windowState.preview ? `mini-preview${windowState.edge === "left" ? " is-left" : ""}` : windowState.mode === "expanded" ? "mini-expanded" : "mini-collapsed"}
+        onPointerLeave={() => { cancelLeave(); if (windowState.preview && !gesture.current?.active) leaveTimer.current = setTimeout(() => { leaveTimer.current = null; void control(window.miniAPI.endPreview); }, 500); }}>
+        {windowState.mode === "expanded" && <main className="mini-shell" onPointerDownCapture={() => { if (windowState.preview) { cancelLeave(); void control(window.miniAPI.expand); } }}>
         <MiniResizeGrips onError={error => setError(errorMessage(error))} />
-        <header className="mini-header"><div><h1>Today</h1><p>{data ? new Date(data.now).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", timeZone: data.timeZone }) : "Your day at a glance"}</p></div>
+        <header className="mini-header"><div><h1>Today</h1><p>{data ? new Date(data.now).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", timeZone: data.timeZone }) : "Your day at a glance"} <time className="mini-header-clock" dateTime={new Date(clockNow).toISOString()}>{new Date(clockNow).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: data?.timeZone })}</time></p></div>
             <div className="mini-window-actions"><button type="button" aria-label="Open main app" title="Open main app" onClick={() => void control(window.miniAPI.openMain)}><Icon name="open-details" /></button><button type="button" aria-label="Hide panel" title="Hide panel" onClick={() => void control(window.miniAPI.collapse)}><span aria-hidden="true">−</span></button></div>
         </header>
         <nav className="mini-view-switch" aria-label="Mini view mode"><button type="button" aria-pressed={!dayView} onClick={() => setDayView(false)}>Now &amp; Next</button><button type="button" aria-pressed={dayView} onClick={() => setDayView(true)}>Today timetable</button></nav>
@@ -132,5 +133,5 @@ export default function MiniView() {
             {!!sections.completed.length && <details className="mini-completed"><summary>Completed today <span>{sections.completed.length}</span></summary>{sections.completed.map(row => card(row, "completed"))}</details>}
         </div>}
         <footer className="mini-footer"><span role="status">{message || "Self Discipline Manager"}</span><span className="mini-resize-hint" title="Drag window edges to resize" aria-hidden="true">◢</span></footer>
-    </main>{windowState.preview && <div className="mini-preview-ball">{ball}</div>}</div>;
+    </main>}<div className="mini-preview-ball">{(windowState.preview || windowState.mode !== "expanded") && ball}</div></div>;
 }

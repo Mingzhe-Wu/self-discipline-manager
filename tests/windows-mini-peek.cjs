@@ -21,9 +21,39 @@ const until = async (check, message) => { for (let n = 0; n < 100; n++) { if (aw
         const saved = JSON.parse(fs.readFileSync(path.join(evidence, 'userData/mini-window-state.json'), 'utf8'));
         assert.equal(saved.mode, 'ball', 'temporary preview is not persisted as expanded');
         assert.equal(saved.x, origin.x); assert.equal(saved.y, origin.y);
+        const dragBall = mini.getByRole('button', { name: 'Expand Today mini view' });
+        await dragBall.hover();
+        const previewBall = await dragBall.boundingBox();
+        await mini.mouse.move(previewBall.x + previewBall.width / 2, previewBall.y + previewBall.height / 2);
+        const beforeDrag = await native.evaluate(window => window.getBounds());
+        await app.evaluate(({ screen }) => {
+            globalThis.__miniOriginalCursor = screen.getCursorScreenPoint;
+            globalThis.__miniDragCursor = { x: 528, y: 528 };
+            screen.getCursorScreenPoint = () => globalThis.__miniDragCursor;
+        });
+        await mini.mouse.down();
+        assert.equal((await state()).preview, true, 'press retains hover preview');
+        await app.evaluate(() => { globalThis.__miniDragCursor = { x: 458, y: 493 }; });
+        await mini.mouse.move(previewBall.x + previewBall.width / 2 - 70, previewBall.y + previewBall.height / 2 - 35, { steps: 6 });
+        await until(async () => Math.abs((await native.evaluate(window => window.getBounds())).x - beforeDrag.x) > 30, 'captured pointer moves ball');
+        await mini.mouse.up();
+        await app.evaluate(({ screen }) => { screen.getCursorScreenPoint = globalThis.__miniOriginalCursor; });
+        assert.equal((await state()).preview, true, 'drag keeps preview visible without pinning');
+        const movedBall = await native.evaluate(window => window.getBounds());
+        assert.ok(Math.abs(movedBall.x - beforeDrag.x) > 30, 'preview ball really moves');
+        assert.equal(movedBall.width, beforeDrag.width);
+        assert.equal(movedBall.height, beforeDrag.height);
+        await mini.mouse.move(-30, -30);
+        await until(async () => (await state()).mode === 'ball', 'leaving dragged preview collapses to moved ball');
+        const restored = await native.evaluate(window => window.getBounds());
+        assert.equal(restored.x + restored.width, movedBall.x + movedBall.width);
+        assert.equal(restored.y + restored.height, movedBall.y + movedBall.height);
+        await native.evaluate((window, origin) => window.setBounds(origin), origin);
+        await dragBall.hover();
+        await until(async () => (await state()).preview, 'hover still works after drag');
         await mini.locator('.mini-view-switch').hover();
         await new Promise(resolve => setTimeout(resolve, 300));
-        assert.equal((await state()).preview, true, 'entering panel keeps preview open');
+        assert.equal((await state()).preview, true, 'entering panel retains temporary preview beyond dismissal delay');
         await mini.mouse.move(-30, -30);
         await until(async () => (await state()).mode === 'ball', 'leaving restores ball');
         assert.deepEqual(await native.evaluate(window => window.getBounds()), origin);
@@ -34,6 +64,15 @@ const until = async (check, message) => { for (let n = 0; n < 100; n++) { if (aw
         await mini.mouse.move(-30, -30);
         await new Promise(resolve => setTimeout(resolve, 400));
         assert.equal((await state()).mode, 'expanded', 'pinned panel stays expanded');
+        assert.match(await mini.locator('.mini-header-clock').innerText(), /^\d{2}:\d{2}$/);
+        await mini.getByRole('button', { name: 'Today timetable', exact: true }).click();
+        await mini.getByRole('region', { name: "Today's timetable", exact: true }).waitFor();
+        const positioned = await mini.locator('.mini-day-viewport').evaluate(node => {
+            const top = parseFloat(node.querySelector('.mini-day-now').style.top);
+            const expected = Math.max(0, Math.min(1440 * 1.2 - node.clientHeight, top - node.clientHeight / 3));
+            return Math.abs(node.scrollTop - expected) < 2;
+        });
+        assert.ok(positioned, 'mini timetable positions NOW one third down, clamped to day bounds');
         await mini.evaluate(() => window.miniAPI.collapse());
         await until(async () => (await state()).mode === 'ball', 'collapse restores ball');
         await mini.evaluate(() => window.miniAPI.beginDrag());
@@ -51,6 +90,25 @@ const until = async (check, message) => { for (let n = 0; n < 100; n++) { if (aw
         await mini.evaluate(() => window.miniAPI.endPreview());
         assert.equal((await state()).mode, 'docked');
         assert.deepEqual(await native.evaluate(window => window.getBounds()), docked);
+        await app.evaluate(({ Menu }) => {
+            const build = Menu.buildFromTemplate;
+            Menu.buildFromTemplate = (...args) => {
+                const menu = build.apply(Menu, args);
+                if (menu.getMenuItemById('close-mini-ball')) globalThis.__miniPeekMenu = menu;
+                return menu;
+            };
+        });
+        await mini.getByRole('button', { name: 'Expand Today mini view' }).hover();
+        await until(async () => (await state()).preview, 'hover opens before right-click');
+        await mini.getByRole('button', { name: 'Expand Today mini view' }).click({ button: 'right' });
+        await until(() => app.evaluate(() => !!globalThis.__miniPeekMenu), 'preview ball opens native context menu');
+        await mini.evaluate(() => window.miniAPI.endPreview());
+        assert.equal((await state()).preview, true, 'menu prevents preview dismissal');
+        await app.evaluate(() => {
+            globalThis.__miniPeekMenu.getMenuItemById('close-mini-ball').click();
+            globalThis.__miniPeekMenu.closePopup();
+        });
+        await until(() => native.evaluate(window => !window.isVisible()), 'context menu closes floating ball');
         console.log('PASS mini hover peek, leave restoration, click pin, and drag suppression: ' + evidence);
     } finally { await app.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -6,6 +6,8 @@ import { occurrenceState } from "../../shared/occurrenceLifecycle";
 import { displayRangeGeometry, layoutOverlaps, splitOccurrenceDisplaySegments } from "../timetableLayout";
 import Icon from "./Icon";
 
+import { currentTimeScrollTop } from "../timetableViewport";
+
 const DENSITY = 1.2;
 
 export default function MiniDayTimetable({ data, onOpenTask }: { data: MiniToday; onOpenTask: (row: ScheduledOccurrence) => void }) {
@@ -19,8 +21,8 @@ export default function MiniDayTimetable({ data, onOpenTask }: { data: MiniToday
     const currentMinute = hour * 60 + minute;
     useEffect(() => {
         const node = viewport.current;
-        if (node) node.scrollTop = Math.max(0, currentMinute * DENSITY - node.clientHeight / 2);
-        // Center only on opening this view/date, not on every refresh or resize.
+        if (node) node.scrollTop = currentTimeScrollTop(currentMinute, 0, 1440, DENSITY, node.clientHeight, 0);
+        // Position now one third down only on opening this view/date, not on every refresh or resize.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data.date]);
     return <div className="mini-day-viewport" ref={viewport} role="region" aria-label="Today's timetable">

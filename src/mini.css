@@ -100,3 +100,8 @@ h1,h2,h3,p { margin: 0; }
 .mini-preview .mini-resize-grip { display: none; }
 
 .mini-preview.is-left .mini-preview-ball { align-self: flex-start; }
+
+.mini-header-clock { display: block; margin-top: 4px; color: #425b78; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.mini-collapsed { height: 100svh; }
+.mini-expanded > .mini-preview-ball { display: none; }

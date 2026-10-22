@@ -24,10 +24,10 @@ export function currentTimePosition(timestamp: number, timeZone: string, startMi
     return { top: (minute - startMinute) * density, visible: minute >= startMinute && minute <= endMinute };
 }
 
-export function centeredScrollTop(minute: number, startMinute: number, endMinute: number, density: number, viewportHeight: number, headerHeight = TIMETABLE_HEADER_HEIGHT) {
+export function currentTimeScrollTop(minute: number, startMinute: number, endMinute: number, density: number, viewportHeight: number, headerHeight = TIMETABLE_HEADER_HEIGHT) {
     const visible = Math.max(0, viewportHeight - headerHeight);
     const offset = (Math.max(startMinute, Math.min(endMinute, minute)) - startMinute) * density;
-    return Math.max(0, Math.min(Math.max(0, (endMinute - startMinute) * density - visible), offset - visible / 2));
+    return Math.max(0, Math.min(Math.max(0, (endMinute - startMinute) * density - visible), offset - visible / 3));
 }
 
 export function timelineTicks(start: number, end: number) {

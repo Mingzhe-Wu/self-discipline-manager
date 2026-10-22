@@ -18,7 +18,7 @@ import { useOccurrenceResize } from "../useOccurrenceResize";
 
 import type { PlanningHours } from "../../shared/types/settings";
 import { DEFAULT_PLANNING_HOURS } from "../../shared/scheduling/planningHours";
-import { centeredScrollTop, currentTimePosition, localMinute, timelineTicks, viewportDensity } from "../timetableViewport";
+import { currentTimeScrollTop, currentTimePosition, localMinute, timelineTicks, viewportDensity } from "../timetableViewport";
 
 const clockMinute = (clock: string) => Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3, 5));
 type DisplayOccurrence = DisplaySegment & { occurrence: ScheduledOccurrence };
@@ -166,7 +166,7 @@ export default function WeekSchedule({ from, tasks, occurrences, now, timeZone, 
         if (lastCenter.current === request) return;
         lastCenter.current = request;
         board.current.scrollTop = from === weekRange(Date.now(), timeZone, weekStartsOn).from
-            ? centeredScrollTop(localMinute(Date.now(), timeZone), start, end, density, viewportHeight)
+            ? currentTimeScrollTop(localMinute(Date.now(), timeZone), start, end, density, viewportHeight)
             : 0;
     }, [showRevision, centerRevision, dataReady, from, start, end, density, viewportHeight, timeZone, weekStartsOn]);
     return (

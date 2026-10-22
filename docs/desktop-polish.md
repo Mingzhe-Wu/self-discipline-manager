@@ -4,7 +4,7 @@ This pass preserves Task schedules, recurrence, categories, occurrence history, 
 
 ## Week navigation and cards
 
-Initial current-week display, explicit **This week** and a window-show refresh center the current local time within available scroll bounds. Centering waits for accepted week/planning data and the latest viewport measurement. Every week-navigation or window-show positioning request centers the current week on the current local time, or resets a non-current week to the top. Background data refreshes do not continuously reposition the board.
+Initial current-week display, explicit **This week** and a window-show refresh place the current local time about one third down the usable timetable within scroll bounds. Centering waits for accepted week/planning data and the latest viewport measurement. Every week-navigation or window-show positioning request positions the current week with NOW one third down the visible timetable, or resets a non-current week to the top. Background data refreshes do not continuously reposition the board.
 
 Planned stays neutral gray. In Progress has the strongest desaturated blue, border and small status accent. Finished stays readable in soft green at 82% default opacity, returning to full opacity when expanded.
 
@@ -65,3 +65,13 @@ A recurring series entry in Task Center opens the existing TaskForm in an Edit r
 While Ctrl is held, the bottom-center label reads: "Ctrl mode active. See the instructions in the top-right corner." The non-interactive pointer hint stays visible over empty space, selected ranges and cards, and changes for start selection, end confirmation, edge targeting and active dragging. Drag hints include release-to-save and right-click-to-cancel guidance. The pointer guide remains visible and snapped to five minutes; no blur or soft-focus treatment is applied.
 
 Task Center defaults to all records with two lightweight, mutually exclusive Recurring/Missed chips. Re-selecting a chip clears it. Titles are display text, not identity: same-name Tasks and distinct missed occurrences remain separate rows, identified by their schedule/type. Series rows open series editing; missed rows open selected-occurrence Details; ordinary one-time rows open normal Details.
+
+## Split clock inputs and Planned editing spacing
+
+Planned Start Time and End Time each contain a compact Hour select (00–23) and Minute select (00, 05, …, 55). Ordinary Add defaults all four fields to placeholders; selecting one part does not invent the other. Explicit quick-add prefills and existing Task schedules are preserved. Partial/cleared input cannot enter duration arithmetic or produce NaN; complete valid ranges are still required to save. Details uses two columns for the Planned endpoint groups, separated by 24px, rather than squeezing both endpoints into a three-column scheduling row.
+
+Actual exact inputs reuse the split controls with Hour/Minute placeholders. The outer endpoint summary can still say Not recorded when empty. Actual minute options keep timestamp identity (including DST repeats) and saved precise values; opening the editor does not round records. The upper visual timeline and lower exact inputs continue sharing preview/validation/persistence.
+
+## Floating ball preview
+
+Hover peeks; clicking pins. The temporary panel retains the ball below it, opens after a 500ms hover and restores its original ball/tab position 500ms after the pointer leaves both the ball and panel, unless clicked to pin. Moving into either region cancels dismissal. See [floating Today design](desktop-mini-view.md) for timings, native-window persistence, drag/fullscreen handling and focused verification. This is independent of the main timetable's Task hover/lifecycle gate.
