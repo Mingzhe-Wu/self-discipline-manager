@@ -1,0 +1,6 @@
+.clock-time-select { display: grid; grid-template-columns: minmax(0, 76px) auto minmax(0, 82px); align-items: center; gap: 5px; min-width: 0; width: fit-content; max-width: 100%; }
+.clock-time-select > label { min-width: 0; }
+.clock-time-select select { width: 100%; min-width: 0; }
+.clock-time-colon { color: #738397; }
+.schedule-fields > .clock-field { display: grid; grid-column: span 1; align-content: start; gap: 7px; min-width: 0; font-size: 13px; font-weight: 500; }
+.task-details .inline-task-form .clock-field { gap: 5px; font-size: 11px; }

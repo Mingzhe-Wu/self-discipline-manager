@@ -2,6 +2,8 @@ import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from '
 import type { ActualEndpoint } from '../actualTimeline';
 import { localTimeOptions, snapActualTime } from '../actualTimeline';
 import { localDateInput } from '../taskFormatting';
+import ClockTimeSelect from './ClockTimeSelect';
+import { CLOCK_HOURS } from '../clockTime';
 
 interface Props {
     endpoint: ActualEndpoint; value: number | null; fallback: number; disabled: boolean; selectingDisabled: boolean;
@@ -14,6 +16,23 @@ export default function ActualEndpointControl({ endpoint, value, fallback, disab
     const [emptyDate, setEmptyDate] = useState(() => localDateInput(fallback));
     const date = value === null ? emptyDate : localDateInput(value);
     const options = useMemo(() => localTimeOptions(date, value), [date, value]);
+    const hour = value === null ? '' : String(new Date(value).getHours()).padStart(2, '0');
+    const inHour = options.filter(option => String(new Date(option.value).getHours()).padStart(2, '0') === hour);
+    const hourChoices = CLOCK_HOURS.map(hour => ({ value: hour, label: hour, disabled: !options.some(option => new Date(option.value).getHours() === Number(hour)) }));
+    const minuteChoices = inHour.map(option => {
+        const minute = new Date(option.value).getMinutes();
+        const repeated = inHour.filter(other => !other.precise && new Date(other.value).getMinutes() === minute).length > 1;
+        return { value: String(option.value), label: option.precise || repeated ? option.label : String(minute).padStart(2, '0') };
+    });
+    function changeHour(next: string) {
+        if (!next) { onChange(null); return; }
+        const wantedMinute = new Date(value ?? fallback).getMinutes();
+        const candidates = options.filter(option => !option.precise && new Date(option.value).getHours() === Number(next));
+        const valid = endpoint === 'endedAt' ? candidates.filter(option => option.value >= fallback) : candidates;
+        const choices = valid.length ? valid : candidates;
+        const closest = choices.reduce<typeof candidates[number] | undefined>((best, option) => !best || Math.abs(new Date(option.value).getMinutes() - wantedMinute) < Math.abs(new Date(best.value).getMinutes() - wantedMinute) ? option : best, undefined);
+        if (closest) onChange(closest.value);
+    }
     const [open, setOpen] = useState(false);
     const panel = useRef<HTMLDivElement>(null);
     const button = useRef<HTMLButtonElement>(null);
@@ -45,10 +64,9 @@ export default function ActualEndpointControl({ endpoint, value, fallback, disab
                 <legend>{label}</legend>
                 <div className="actual-endpoint-inputs">
                     <label><span className="sr-only">{label} date (local)</span><input aria-label={`${label} date (local)`} type="date" value={date} onChange={event => changeDate(event.target.value)} /></label>
-                    <label><span className="sr-only">{label} time (local)</span><select aria-label={`${label} time (local)`} value={value ?? ''} onChange={event => onChange(event.target.value === '' ? null : Number(event.target.value))}>
-                        <option value="">Not recorded</option>
-                        {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select></label>
+                    <ClockTimeSelect label={label} hour={hour} minute={value === null ? '' : String(value)} hours={hourChoices} minutes={minuteChoices}
+                        minuteDisabled={value === null} onHourChange={changeHour}
+                        onMinuteChange={next => onChange(next === '' ? null : Number(next))} />
                 </div>
             </fieldset>
         </div>

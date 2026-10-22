@@ -81,3 +81,43 @@ test('hover expansion anchors downward and only flips upward when the visible bo
     assert.equal(hoverExpansionOffset(540, 20, 120, 600), -100);
     assert.equal(hoverExpansionOffset(200, 180, 180, 600), 0);
 });
+
+test('a long task with many sequential short tasks needs only two reusable columns', () => {
+    const ranges = [range(1, 0, 1440), ...Array.from({ length: 10 }, (_, i) => range(i + 2, 60 + i * 90, 90 + i * 90))];
+    const before = structuredClone(ranges), layout = layoutOverlaps(ranges, 15);
+    assert.ok(layout.every(row => row.groupSize === 2 && row.widthFraction === .525));
+    assert.equal(layout[0].column, 0); assert.ok(layout.slice(1).every(row => row.column === 1));
+    assert.deepEqual(ranges, before);
+    const reversed = layoutOverlaps(ranges.toReversed(), 15).toReversed();
+    assert.deepEqual(reversed, layout);
+});
+
+test('a chained overlap reuses an ended task column instead of narrowing every member', () => {
+    const layout = layoutOverlaps([range(1, 600, 720), range(2, 660, 780), range(3, 720, 840)]);
+    assert.deepEqual(layout.map(row => row.column), [0, 1, 0]);
+    assert.ok(layout.every(row => row.groupSize === 2));
+});
+
+test('a brief three-way overlap uses three columns and later tasks reuse released columns', () => {
+    const layout = layoutOverlaps([range(1, 0, 1440), range(2, 60, 120), range(3, 90, 150), range(4, 300, 360), range(5, 500, 560)], 15);
+    assert.ok(layout.every(row => row.groupSize === 3));
+    assert.ok(layout.slice(0, 3).every(row => Math.abs(row.widthFraction - .35) < 1e-10));
+    assert.ok(layout.slice(3).every(row => Math.abs(row.widthFraction - .675) < 1e-10));
+    assert.deepEqual(layout.map(row => row.column), [0, 1, 2, 1, 1]);
+});
+
+test('a short task fills consecutive free columns to its right while later overlapping cards stay separate', () => {
+    const rows = [range(1, 0, 1440), range(2, 540, 600), range(3, 720, 840), range(4, 780, 840)];
+    const layout = layoutOverlaps(rows, 15);
+    assert.ok(Math.abs(layout[1].widthFraction + layout[1].offsetFraction - 1) < 1e-10);
+    assert.ok(Math.abs(layout[1].widthFraction - .675) < 1e-10);
+    assert.ok(Math.abs(layout[2].widthFraction - .35) < 1e-10);
+    assert.deepEqual(layoutOverlaps(rows.toReversed(), 15).toReversed(), layout);
+});
+
+test('rightward fill cannot cover a column occupied during even part of the task visual interval', () => {
+    const layout = layoutOverlaps([range(1, 0, 1440), range(2, 540, 600), range(3, 595, 620)], 15);
+    assert.ok(layout.every(row => Math.abs(row.widthFraction - .35) < 1e-10));
+    const floor = layoutOverlaps([range(1, 0, 1440), range(2, 540, 545), range(3, 550, 555)], 15);
+    assert.ok(floor.every(row => Math.abs(row.widthFraction - .35) < 1e-10));
+});

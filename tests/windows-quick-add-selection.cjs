@@ -1,3 +1,4 @@
+const { clockField } = require('./clock-field.cjs');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {_electron}=require('playwright-core');
 (async()=>{
@@ -25,13 +26,13 @@ const {_electron}=require('playwright-core');
   await page.mouse.move(point.x,point.y+90*density);assert.match(await selection.innerText(),/13:00–14:30/);assert.equal(await page.locator('.quick-add-guide-time').innerText(),'14:30');assert.equal(await form.count(),0);
   await page.mouse.click(point.x,point.y-30*density);assert.equal(await form.count(),0,'upward range is rejected');
   await page.mouse.move(point.x,point.y+90*density);await page.screenshot({path:path.join(evidence,'two-click-selection.png')});
-  await page.mouse.click(point.x,point.y+90*density);await form.waitFor();assert.equal(await form.getByLabel('Date',{exact:true}).inputValue(),date);assert.equal(await form.getByLabel('Start Time',{exact:true}).inputValue(),'13:00');assert.equal(await form.getByLabel('End Time',{exact:true}).inputValue(),'14:30');
+  await page.mouse.click(point.x,point.y+90*density);await form.waitFor();assert.equal(await form.getByLabel('Date',{exact:true}).inputValue(),date);assert.equal(await clockField(form, 'Start Time').inputValue(),'13:00');assert.equal(await clockField(form, 'End Time').inputValue(),'14:30');
   await page.keyboard.up('Control');await form.getByRole('button',{name:'Cancel',exact:true}).click();
   await page.keyboard.down('Control');await page.mouse.click(point.x,point.y);await selection.waitFor();await page.mouse.click(point.x,point.y,{button:'right'});await selection.waitFor({state:'hidden'});assert.equal(await form.count(),0);
   await page.mouse.click(point.x,point.y);await selection.waitFor();await page.keyboard.up('Control');await selection.waitFor({state:'hidden'});assert.equal(await page.locator('.quick-add-visual').count(),0);
-  await page.keyboard.down('Control');await page.mouse.dblclick(point.x,point.y);await form.waitFor();assert.equal(await form.count(),1);assert.equal(await form.getByLabel('Start Time',{exact:true}).inputValue(),'13:00');assert.equal(await form.getByLabel('End Time',{exact:true}).inputValue(),'');
+  await page.keyboard.down('Control');await page.mouse.dblclick(point.x,point.y);await form.waitFor();assert.equal(await form.count(),1);assert.equal(await clockField(form, 'Start Time').inputValue(),'13:00');assert.equal(await clockField(form, 'End Time').inputValue(),'');
   await page.keyboard.up('Control');await form.getByLabel('Task title',{exact:true}).fill('End required');await form.getByRole('button',{name:'Create Task',exact:true}).click();assert.equal((await page.evaluate(()=>window.electronAPI.listTasks())).length,0,'missing end cannot be persisted');assert.equal(await form.isVisible(),true);
-  await form.getByLabel('End Time',{exact:true}).selectOption('14:00');await form.getByRole('button',{name:'Create Task',exact:true}).click();await form.waitFor({state:'hidden'});assert.equal((await page.evaluate(()=>window.electronAPI.listTasks())).length,1);
+  await clockField(form, 'End Time').selectOption('14:00');await form.getByRole('button',{name:'Create Task',exact:true}).click();await form.waitFor({state:'hidden'});assert.equal((await page.evaluate(()=>window.electronAPI.listTasks())).length,1);
   assert.deepEqual(errors,[]);console.log('PASS two-click creation, same-position start-only form, upward rejection and Ctrl/right-click cancellation: '+evidence);
  }catch(error){const page=app.windows()[0];if(page)await page.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});throw error;}finally{await app.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

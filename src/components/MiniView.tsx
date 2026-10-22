@@ -59,16 +59,16 @@ export default function MiniView() {
         return window.miniAPI.openTask(row.record ? { taskId: row.taskId, occurrenceId: row.record.id } : { taskId: row.taskId, scheduledStartAt: row.scheduledStartAt, scheduledEndAt: row.scheduledEndAt });
     }
     const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: data?.timeZone });
-    function card(row: ScheduledOccurrence, kind: "running" | "planned" | "missed") {
+    function card(row: ScheduledOccurrence, kind: "running" | "planned" | "missed" | "completed") {
         const task = tasks.get(row.taskId);
         if (!task) return null;
         const category = categoryMetadata(task.category), range = occurrenceDisplayRange(row, data!.now);
-        return <article key={`${row.taskId}:${row.scheduledStartAt}:${row.scheduledEndAt}`} className={`mini-task is-${kind}`} data-task-id={task.id} data-state={kind} aria-label={`${task.title}, ${category.label}, ${kind === "running" ? "In Progress" : kind === "missed" ? "Missed" : "Planned"}`}>
+        return <article key={`${row.taskId}:${row.scheduledStartAt}:${row.scheduledEndAt}`} className={`mini-task is-${kind}`} data-task-id={task.id} data-state={kind} aria-label={`${task.title}, ${category.label}, ${kind === "running" ? "In Progress" : kind === "missed" ? "Missed" : kind === "completed" ? "Finished" : "Planned"}`}>
             <button type="button" className="mini-task-open" aria-label={`Open details for ${task.title}`} onClick={() => void control(() => openTask(row))}><span className="mini-task-copy"><span className="mini-task-title" title={task.title}><span aria-hidden="true">{category.emoji}</span><span>{task.title}</span></span>
                 <span className="mini-task-time">{kind === "running" ? `Started ${clock(row.record!.startedAt!)}` : `${clock(range.startAt)}–${clock(range.endAt)}`}</span>
                 {kind === "running" && <small>Planned until {clock(row.scheduledEndAt)}</small>}
-            </span>{kind === "missed" && <span className="mini-missed-label">Missed</span>}</button>
-            {kind !== "missed" && <button className="mini-action" type="button" disabled={busy} aria-label={`${kind === "running" ? "Finish" : "Start"} ${task.title}`} onClick={event => { event.stopPropagation(); void act(row, task, kind === "running"); }}>{kind === "running" ? "Finish" : "Start"}</button>}
+            </span>{kind === "missed" && <span className="mini-missed-label">Missed</span>}{kind === "completed" && <span className="mini-completed-label">Finished</span>}</button>
+            {(kind === "running" || kind === "planned") && <button className="mini-action" type="button" disabled={busy} aria-label={`${kind === "running" ? "Finish" : "Start"} ${task.title}`} onClick={event => { event.stopPropagation(); void act(row, task, kind === "running"); }}>{kind === "running" ? "Finish" : "Start"}</button>}
         </article>;
     }
     if (windowState.mode !== "expanded") {
@@ -116,6 +116,7 @@ export default function MiniView() {
             {sections.upcoming.length > 1 && <section aria-label="Later"><h2>Later today</h2>{sections.upcoming.slice(1).map(row => card(row, "planned"))}</section>}
             {data && !sections.running.length && !sections.upcoming.length && <div className="mini-empty"><Icon name="calendar" /><p>No more upcoming tasks today.</p><button type="button" onClick={() => void control(window.miniAPI.openMain)}>Open your schedule</button></div>}
             {!!sections.missed.length && <details className="mini-missed"><summary>Missed today <span>{sections.missed.length}</span></summary>{sections.missed.map(row => card(row, "missed"))}</details>}
+            {!!sections.completed.length && <details className="mini-completed"><summary>Completed today <span>{sections.completed.length}</span></summary>{sections.completed.map(row => card(row, "completed"))}</details>}
         </div>}
         <footer className="mini-footer"><span role="status">{message || "Self Discipline Manager"}</span><span className="mini-resize-hint" title="Drag window edges to resize" aria-hidden="true">◢</span></footer>
     </main>;

@@ -12,7 +12,7 @@ test('mini bounds recover offscreen/negative-monitor positions and fit small dis
     assert.deepEqual(fitMiniBounds(null, [{ x: 0, y: 0, width: 300, height: 350 }]), { x: 0, y: 0, width: 300, height: 350 });
 });
 
-test('mini projection prioritizes all running tasks, next/upcoming and today missed without finished clutter', () => {
+test('mini projection groups running, upcoming, missed and completed separately', () => {
     const { miniSections } = require('../shared/scheduling/miniSchedule.ts');
     const now = Date.parse('2026-10-21T12:00Z');
     const row = (id, start, end, actual = {}) => ({ taskId: id, scheduledStartAt: now + start * 60000, scheduledEndAt: now + end * 60000, record: { id, startedAt: null, endedAt: null, ...actual } });
@@ -21,6 +21,7 @@ test('mini projection prioritizes all running tasks, next/upcoming and today mis
     assert.deepEqual(result.running.map(row => row.taskId), [1]);
     assert.deepEqual(result.upcoming.map(row => row.taskId), [2, 3]);
     assert.deepEqual(result.missed.map(row => row.taskId), [4]);
+    assert.deepEqual(result.completed.map(row => row.taskId), [5]);
 });
 
 test('ball and edge tab fit their own dimensions after monitor changes', () => {

@@ -64,7 +64,8 @@ export function splitOccurrenceDisplaySegments(occurrence: ScheduledOccurrence, 
     return splitDisplaySegments({ scheduledStartAt: start, scheduledEndAt: end }, timeZone);
 }
 
-/** Connected visual intersections use staggered columns, not disjoint equal slices.
+/** Connected visual intersections reuse columns as cards end. Width depends on
+ * peak simultaneous occupancy, not the number of tasks connected by a long card.
  * minimumMinutes matches the short-card display floor; planned input is untouched. */
 export function layoutOverlaps(ranges: readonly OverlapRange[], minimumMinutes = 0): OverlapLayout[] {
     const startOf = (index: number) => ranges[index].scheduledStartAt ?? ranges[index].startMinute;
@@ -78,10 +79,34 @@ export function layoutOverlaps(ranges: readonly OverlapRange[], minimumMinutes =
     let members: number[] = [];
     let groupEnd = -Infinity;
     function finishGroup() {
-        const width = members.length === 1 ? 1 : 1.05 / members.length;
-        members.sort(compare).forEach((index, column) => {
-            layouts[index] = { ...layouts[index], groupSize: members.length, column, widthFraction: width,
-                offsetFraction: members.length === 1 ? 0 : column * (1 - width) / (members.length - 1) };
+        const columnEnds: number[] = [];
+        const assigned = new Map<number, number>();
+        // members already follows visual start order, with stable identity ties.
+        for (const index of members) {
+            const range = ranges[index];
+            let column = columnEnds.findIndex(end => end <= range.startMinute);
+            if (column === -1) column = columnEnds.length;
+            columnEnds[column] = Math.max(range.endMinute, range.startMinute + minimumMinutes);
+            assigned.set(index, column);
+        }
+        const count = columnEnds.length;
+        const width = count === 1 ? 1 : 1.05 / count;
+        const step = count === 1 ? 0 : (1 - width) / (count - 1);
+        const columns: number[][] = Array.from({ length: count }, () => []);
+        for (const index of members) columns[assigned.get(index)!].push(index);
+        members.forEach(index => {
+            const column = assigned.get(index)!;
+            const range = ranges[index];
+            const visualEnd = Math.max(range.endMinute, range.startMinute + minimumMinutes);
+            let span = 1;
+            for (let next = column + 1; next < count; next++) {
+                const blocked = columns[next].some(other => ranges[other].startMinute < visualEnd &&
+                    Math.max(ranges[other].endMinute, ranges[other].startMinute + minimumMinutes) > range.startMinute);
+                if (blocked) break;
+                span++;
+            }
+            layouts[index] = { ...layouts[index], groupSize: count, column, widthFraction: width + (span - 1) * step,
+                offsetFraction: column * step };
         });
     }
     for (const index of visualOrder) {

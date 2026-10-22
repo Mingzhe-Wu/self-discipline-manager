@@ -1,3 +1,4 @@
+const { clockField } = require('./clock-field.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -120,7 +121,7 @@ async function until(check, message) { for (let n = 0; n < 160; n++) { if (await
         await page.mouse.click(point.x, point.y + 90 * density);
         const form = page.getByRole('dialog', { name: 'Add Task', exact: true }); await form.waitFor();
         assert.equal(await form.count(), 1); assert.equal(await form.getByLabel('Date', { exact: true }).inputValue(), selectedDate);
-        assert.equal(await form.getByLabel('Start Time', { exact: true }).inputValue(), '13:00'); assert.equal(await form.getByLabel('End Time', { exact: true }).inputValue(), '14:30');
+        assert.equal(await clockField(form, 'Start Time').inputValue(), '13:00'); assert.equal(await clockField(form, 'End Time').inputValue(), '14:30');
         await page.keyboard.up('Control'); await form.getByRole('button', { name: 'Cancel', exact: true }).click();
         assert.deepEqual(errors, []);
         console.log('PASS Ctrl lifecycle edge resize, cancellation, recurring detach and two-click selection: ' + evidence);

@@ -4,6 +4,7 @@ import type { MiniToday } from "../../shared/types/mini";
 import { categoryMetadata } from "../../shared/taskCategories";
 import { occurrenceState } from "../../shared/occurrenceLifecycle";
 import { displayRangeGeometry, layoutOverlaps, splitOccurrenceDisplaySegments } from "../timetableLayout";
+import Icon from "./Icon";
 
 const DENSITY = 1.2;
 
@@ -38,6 +39,7 @@ export default function MiniDayTimetable({ data, onOpenTask }: { data: MiniToday
                         style={{ top: geometry.top, height: geometry.height, left: `${layout.offsetFraction * 100}%`, width: `${layout.widthFraction * 100}%`, zIndex: layout.zIndex }}
                         aria-label={`${task.title}, ${category.label}, ${label}, ${range}. Open details`} title={`${task.title} · ${label} · Planned ${range} — open details`}
                         onClick={() => onOpenTask(row)}>
+                        <Icon name="open-details" className="mini-day-details-hint" />
                         <strong><span aria-hidden="true">{category.emoji}</span> {task.title}</strong>
                         <span className={geometry.height < 32 ? "is-collapsed" : undefined}>{range}</span>
                         <small className={geometry.height < 48 ? "is-collapsed" : undefined}>{label}</small>

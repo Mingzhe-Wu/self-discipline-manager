@@ -65,6 +65,9 @@ h1,h2,h3,p { margin: 0; }
 .mini-day-task.is-completed { background: #e6efe8; border-color: #b2c8b7; }
 .mini-day-task.is-missed { background: #f3e7e8; border-color: #d5b9bd; color: #815a61; }
 .mini-day-task:hover, .mini-day-task:focus-visible { z-index: 1000 !important; filter: brightness(.97); box-shadow: 0 1px 5px #556b8426; }
+.mini-day-details-hint { display: none; position: absolute; top: 3px; right: 4px; width: 14px; height: 14px; pointer-events: none; }
+.mini-day-task:is(:hover, :focus-visible) .mini-day-details-hint { display: block; }
+.mini-day-task:is(:hover, :focus-visible) strong { padding-right: 18px; }
 .mini-day-now { position: absolute; left: 44px; right: 0; border-top: 1px solid #c3797c; z-index: 1001; pointer-events: none; }
 .mini-day-now span { position: absolute; right: 100%; margin-right: 5px; margin-top: -7px; font-size: 9px; color: #ad676d; background: #f7f9fc; }
 
@@ -83,3 +86,9 @@ h1,h2,h3,p { margin: 0; }
 .mini-day-task > * { flex-shrink: 0; }
 .mini-day-task:not(:hover):not(:focus-visible) .is-collapsed { display: none; }
 .mini-day-task.is-short:is(:hover, :focus-visible) { min-height: var(--mini-short-expanded-height); }
+
+.mini-task.is-completed { background: #eaf1ec; border-color: #c3d4c7; color: #54735d; }
+.mini-completed { margin-top: 16px; }
+.mini-completed summary { cursor: pointer; color: #688371; font-size: 11px; margin-bottom: 8px; }
+.mini-completed summary span { margin-left: 5px; }
+.mini-completed-label { font-size: 10px; }

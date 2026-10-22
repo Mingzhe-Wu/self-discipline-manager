@@ -81,7 +81,8 @@ test('week start and configured duration change only projection and new-form def
     const { renderToStaticMarkup } = require('react-dom/server'), React = require('react');
     const Form = require('../src/components/TaskForm.tsx').default;
     const html = renderToStaticMarkup(React.createElement(Form, { initialPlan: { date: '2026-10-22', startTime: '09:00' }, defaultDurationMinutes: 90, onSave: async () => {}, onCancel() {} }));
-    assert.match(html, /value="10:30" selected=""/);
+    assert.match(html.match(/<select aria-label="End Time hour"[\s\S]*?<\/select>/)[0], /value="10" selected=""/);
+    assert.match(html.match(/<select aria-label="End Time minute"[\s\S]*?<\/select>/)[0], /value="30" selected=""/);
 });
 
 test('task settings changes do not rewrite existing plans and notification resume admits future slots', () => {

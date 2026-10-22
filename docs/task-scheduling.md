@@ -103,3 +103,5 @@ Task Details has an information card with Edit at its bottom right, a separate T
 ## Missed workflow and display preferences
 
 See [Missed workflow](missed-workflow.md) for precedence, today-only explicit Late Start, preserved originals, reminder cutoff and the recent-first Missed entry. Wake/Sleep are display preferences only: creation/editing can fall outside them, and the timetable expands without rewriting times. No schema or linkage fields were added.
+
+Planned Add/Edit and Actual endpoint controls use separate hour (00–23) and minute (five-minute) dropdowns. Opening them does not round existing records. Saved precise Actual times remain selectable as an explicit exception; repeated local DST minutes retain distinct timestamp/zone choices. Selecting a new ordinary minute produces an exact five-minute instant, updates the shared timeline, and uses existing validation/persistence.

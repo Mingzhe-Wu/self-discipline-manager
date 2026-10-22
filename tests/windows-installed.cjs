@@ -1,3 +1,4 @@
+const { clockField } = require('./clock-field.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -187,8 +188,8 @@ async function main() {
         await page.getByRole('button', { name: 'Add Task', exact: true }).click();
         await page.getByLabel('Task title', { exact: true }).fill('Installed one-time task');
         await page.getByLabel('Date', { exact: true }).fill(dates.today);
-        await page.getByLabel('Start Time', { exact: true }).selectOption('12:00');
-        await page.getByLabel('End Time', { exact: true }).selectOption('12:30');
+        await clockField(page, 'Start Time').selectOption('12:00');
+        await clockField(page, 'End Time').selectOption('12:30');
         await page.getByLabel('Notifications enabled', { exact: true }).uncheck();
         await page.screenshot({ path: path.join(evidence, 'add-task.png') });
         // The form also rejects past one-time plans. Freeze only this submit;
@@ -316,7 +317,7 @@ async function main() {
         await oneCard.click({ position: { x: 3, y: 6 } });
         const resetDialog = page.getByRole('dialog', { name: 'Reset task?', exact: true });
         await resetDialog.waitFor();
-        await resetDialog.getByText('The task timing records will also be reset.', { exact: true }).waitFor();
+        await resetDialog.getByText('This clears the actual start and end times. The planned schedule will stay unchanged.', { exact: true }).waitFor();
         assert.equal(await resetDialog.getByRole('button', { name: 'Cancel', exact: true }).evaluate((el) => el === document.activeElement), true);
         await resetDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
         assert.deepEqual(await page.evaluate(async () => (await window.electronAPI.listTasks())[0].currentOccurrence), finished, 'cancel preserves all occurrence fields');
@@ -338,8 +339,8 @@ async function main() {
         await page.getByLabel('Task title', { exact: true }).fill('Installed daily task');
         await page.getByLabel('Schedule type', { exact: true }).selectOption('recurring');
         await page.getByLabel('Start date', { exact: true }).fill(dates.past);
-        await page.getByLabel('Start Time', { exact: true }).selectOption('00:00');
-        await page.getByLabel('End Time', { exact: true }).selectOption('00:30');
+        await clockField(page, 'Start Time').selectOption('00:00');
+        await clockField(page, 'End Time').selectOption('00:30');
         await page.getByLabel('Notifications enabled', { exact: true }).uncheck();
         await page.getByRole('button', { name: 'Create Task', exact: true }).click();
         await board.getByRole('heading', { name: 'Installed daily task', exact: true }).first().waitFor();
@@ -388,8 +389,8 @@ async function main() {
         await details.getByRole('button', { name: 'Edit planned task', exact: true }).click();
         const editDialog = page.getByRole('dialog', { name: 'Edit Task', exact: true });
         await editDialog.getByLabel('Task title', { exact: true }).fill('Edited daily task');
-        await editDialog.getByLabel('Start Time', { exact: true }).selectOption('10:00');
-        await editDialog.getByLabel('End Time', { exact: true }).selectOption('10:30');
+        await clockField(editDialog, 'Start Time').selectOption('10:00');
+        await clockField(editDialog, 'End Time').selectOption('10:30');
         await application.evaluate(({ ipcMain }) => {
             globalThis.__slowEditHandler = ipcMain._invokeHandlers.get('task:update-occurrence-plan');
             ipcMain.removeHandler('task:update-occurrence-plan');
@@ -411,8 +412,8 @@ async function main() {
         await page.getByLabel('Schedule type', { exact: true }).selectOption('recurring');
         await page.getByLabel('Repeat', { exact: true }).selectOption('weekly');
         await page.getByLabel('Start date', { exact: true }).fill(dates.monday);
-        await page.getByLabel('Start Time', { exact: true }).selectOption('22:00');
-        await page.getByLabel('End Time', { exact: true }).selectOption('22:30');
+        await clockField(page, 'Start Time').selectOption('22:00');
+        await clockField(page, 'End Time').selectOption('22:30');
         await page.getByLabel('Wednesday', { exact: true }).check();
         await page.getByLabel('Friday', { exact: true }).check();
         await page.getByLabel('Notifications enabled', { exact: true }).uncheck();

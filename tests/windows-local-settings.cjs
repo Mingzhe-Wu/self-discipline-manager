@@ -1,3 +1,4 @@
+const { clockField } = require('./clock-field.cjs');
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const { _electron } = require('playwright-core');
 
@@ -33,10 +34,11 @@ const { _electron } = require('playwright-core');
         assert.equal(await board.getAttribute('data-planning-end'), '1320');
         await page.getByRole('button', { name: 'Add Task', exact: true }).click();
         const add = page.getByRole('dialog', { name: 'Add Task', exact: true });
-        assert.equal(await add.getByLabel('Start Time', { exact: true }).inputValue(), '09:00');
-        assert.equal(await add.getByLabel('End Time', { exact: true }).inputValue(), '10:30');
-        await add.getByLabel('Start Time', { exact: true }).selectOption('06:00');
-        assert.equal(await add.getByLabel('End Time', { exact: true }).inputValue(), '07:30');
+        assert.equal(await clockField(add, 'Start Time').inputValue(), '');
+        assert.equal(await clockField(add, 'End Time').inputValue(), '');
+        await clockField(add, 'Start Time').selectOption('06:00');
+        assert.equal(await clockField(add, 'End Time').inputValue(), '');
+        await clockField(add, 'End Time').selectOption('07:30');
         const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
         const date = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
         await add.getByLabel('Date', { exact: true }).fill(date);

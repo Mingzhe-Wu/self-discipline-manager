@@ -29,8 +29,9 @@ export default function ResetOccurrenceDialog({ taskTitle, target, onChange, onC
         <Dialog title="Reset task?" onClose={onClose} busy={busy} fallbackFocus={fallbackFocus}>
             <div className="reset-confirmation">
                 <strong>{taskTitle}</strong>
-                <p>Are you sure you want to reset this task?</p>
-                <p>The task timing records will also be reset.</p>
+                <p>Reset this task's actual times?</p>
+                <p>This clears the actual start and end times. The planned schedule will stay unchanged.</p>
+                <p>If the planned end time has already passed, the task will become Missed after resetting. To record a completion, open Task Details and manually set the actual start and end times.</p>
                 {error && <p role="alert" className="notice error">{error}</p>}
                 <div className="form-actions">
                     <button type="button" className="secondary-button" data-initial-focus disabled={busy} onClick={onClose}>Cancel</button>

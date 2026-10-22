@@ -20,3 +20,11 @@ test('duration never silently wraps through midnight', () => {
     assert.equal(defaultEndTime('23:30'), '24:30');
     assert.equal(moveStartTime('09:00', '10:00', '23:30', false), '24:30');
 });
+
+test('clearing or partially choosing a start never produces a NaN end', () => {
+    assert.equal(defaultEndTime(''), '');
+    assert.equal(moveStartTime('09:00', '10:00', '', false), '');
+    assert.equal(moveStartTime('09:00', '10:00', '09:', false), '');
+    assert.equal(moveStartTime(':35', '10:00', '09:35', false), '10:00');
+    assert.equal(moveStartTime('09:00', '10:00', ':35', true), '10:00');
+});
