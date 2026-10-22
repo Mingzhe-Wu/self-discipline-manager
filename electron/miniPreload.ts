@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("miniAPI", {
     moveResize: (pointer: MiniPointer) => ipcRenderer.invoke("mini:move-resize", pointer),
     endResize: () => ipcRenderer.invoke("mini:end-resize"),
     getWindowState: () => ipcRenderer.invoke("mini:state"),
+    preview: () => ipcRenderer.invoke("mini:preview"),
+    endPreview: () => ipcRenderer.invoke("mini:endPreview"),
     expand: () => ipcRenderer.invoke("mini:expand"),
     collapse: () => ipcRenderer.invoke("mini:collapse"),
     beginDrag: () => ipcRenderer.invoke("mini:beginDrag"),

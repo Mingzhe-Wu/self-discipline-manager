@@ -92,3 +92,11 @@ h1,h2,h3,p { margin: 0; }
 .mini-completed summary { cursor: pointer; color: #688371; font-size: 11px; margin-bottom: 8px; }
 .mini-completed summary span { margin-left: 5px; }
 .mini-completed-label { font-size: 10px; }
+
+.mini-expanded { height: 100svh; }
+.mini-preview { height: 100svh; display: flex; flex-direction: column; align-items: stretch; }
+.mini-preview .mini-shell { height: calc(100svh - 56px); flex: 1; min-height: 0; }
+.mini-preview-ball { height: 56px; flex-shrink: 0; align-self: flex-end; }
+.mini-preview .mini-resize-grip { display: none; }
+
+.mini-preview.is-left .mini-preview-ball { align-self: flex-start; }

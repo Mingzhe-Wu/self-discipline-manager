@@ -12,6 +12,11 @@ import MiniDayTimetable from "./MiniDayTimetable";
 export default function MiniView() {
     const [dayView, setDayView] = useState(false);
     const [windowState, setWindowState] = useState<MiniWindowState>({ mode: "ball", edge: null });
+    const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const cancelPeek = () => { if (peekTimer.current) clearTimeout(peekTimer.current); peekTimer.current = null; };
+    const cancelLeave = () => { if (leaveTimer.current) clearTimeout(leaveTimer.current); leaveTimer.current = null; };
+    useEffect(() => () => { if (peekTimer.current) clearTimeout(peekTimer.current); if (leaveTimer.current) clearTimeout(leaveTimer.current); }, []);
     const gesture = useRef<{ x: number; y: number; moved: boolean } | null>(null);
     useEffect(() => {
         let active = true;
@@ -71,13 +76,18 @@ export default function MiniView() {
             {(kind === "running" || kind === "planned") && <button className="mini-action" type="button" disabled={busy} aria-label={`${kind === "running" ? "Finish" : "Start"} ${task.title}`} onClick={event => { event.stopPropagation(); void act(row, task, kind === "running"); }}>{kind === "running" ? "Finish" : "Start"}</button>}
         </article>;
     }
-    if (windowState.mode !== "expanded") {
-        const row = sections.running[0] ?? sections.upcoming[0], task = row && tasks.get(row.taskId);
-        return <button type="button" className={`mini-orb ${windowState.mode === "docked" ? `is-docked dock-${windowState.edge}` : ""} ${sections.running.length ? "is-running" : ""}`}
-            aria-label="Expand Today mini view" title={task ? `${task.title} — click to expand; drag to dock` : "Today — click to expand; drag to dock"}
-            onContextMenu={event => { event.preventDefault(); void control(window.miniAPI.showBallMenu); }}
+    const ballRow = sections.running[0] ?? sections.upcoming[0], ballTask = ballRow && tasks.get(ballRow.taskId);
+    const ball = <button type="button" className={`mini-orb ${windowState.mode === "docked" ? `is-docked dock-${windowState.edge}` : ""} ${sections.running.length ? "is-running" : ""}`}
+            aria-label="Expand Today mini view" title={ballTask ? `${ballTask.title} — click to expand; drag to dock` : "Today — click to expand; drag to dock"}
+            onPointerEnter={() => {
+                cancelLeave(); cancelPeek();
+                if (windowState.mode !== "expanded" && !gesture.current) peekTimer.current = setTimeout(() => { peekTimer.current = null; void control(window.miniAPI.preview); }, 250);
+            }}
+            onPointerLeave={cancelPeek}
+            onContextMenu={event => { cancelPeek(); event.preventDefault(); void control(window.miniAPI.showBallMenu); }}
             onPointerDown={event => {
                 if (event.button !== 0) return;
+                cancelPeek();
                 if (windowState.mode !== "ball") { gesture.current = null; return; }
                 event.currentTarget.setPointerCapture(event.pointerId);
                 gesture.current = { x: event.screenX, y: event.screenY, moved: false };
@@ -99,10 +109,13 @@ export default function MiniView() {
                 const dragged = gesture.current?.moved; gesture.current = null;
                 if (!dragged) void control(window.miniAPI.expand);
             }}>
-            <span aria-hidden="true">{windowState.mode === "docked" ? (windowState.edge === "left" ? "›" : "‹") : task ? categoryMetadata(task.category).emoji : "◷"}</span>
+            <span aria-hidden="true">{windowState.mode === "docked" ? (windowState.edge === "left" ? "›" : "‹") : ballTask ? categoryMetadata(ballTask.category).emoji : "◷"}</span>
         </button>;
-    }
-    return <main className="mini-shell">
+    if (windowState.mode !== "expanded") return ball;
+    return <div className={windowState.preview ? `mini-preview${windowState.edge === "left" ? " is-left" : ""}` : "mini-expanded"}
+        onPointerEnter={cancelLeave}
+        onPointerLeave={() => { cancelLeave(); if (windowState.preview) leaveTimer.current = setTimeout(() => { leaveTimer.current = null; void control(window.miniAPI.endPreview); }, 200); }}>
+        <main className="mini-shell" onPointerDownCapture={() => { if (windowState.preview) { cancelLeave(); void control(window.miniAPI.expand); } }}>
         <MiniResizeGrips onError={error => setError(errorMessage(error))} />
         <header className="mini-header"><div><h1>Today</h1><p>{data ? new Date(data.now).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", timeZone: data.timeZone }) : "Your day at a glance"}</p></div>
             <div className="mini-window-actions"><button type="button" aria-label="Open main app" title="Open main app" onClick={() => void control(window.miniAPI.openMain)}><Icon name="open-details" /></button><button type="button" aria-label="Hide panel" title="Hide panel" onClick={() => void control(window.miniAPI.collapse)}><span aria-hidden="true">−</span></button></div>
@@ -119,5 +132,5 @@ export default function MiniView() {
             {!!sections.completed.length && <details className="mini-completed"><summary>Completed today <span>{sections.completed.length}</span></summary>{sections.completed.map(row => card(row, "completed"))}</details>}
         </div>}
         <footer className="mini-footer"><span role="status">{message || "Self Discipline Manager"}</span><span className="mini-resize-hint" title="Drag window edges to resize" aria-hidden="true">◢</span></footer>
-    </main>;
+    </main>{windowState.preview && <div className="mini-preview-ball">{ball}</div>}</div>;
 }

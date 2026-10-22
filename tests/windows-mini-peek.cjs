@@ -1,0 +1,56 @@
+const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
+const { _electron } = require('playwright-core');
+const until = async (check, message) => { for (let n = 0; n < 100; n++) { if (await check()) return; await new Promise(resolve => setTimeout(resolve, 50)); } throw Error(message); };
+
+(async () => {
+    const evidence = fs.mkdtempSync(path.resolve('release/verification/mini-peek-'));
+    const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL;
+    const app = await _electron.launch({ executablePath: require('electron'), args: [path.resolve('.'), '--user-data-dir=' + path.join(evidence, 'userData')], env });
+    try {
+        const main = await app.firstWindow();
+        const created = app.waitForEvent('window');
+        await main.evaluate(() => window.electronAPI.updateUserSettings({ trayMiniEnabled: true }));
+        const mini = await created, native = await app.browserWindow(mini);
+        await mini.getByRole('button', { name: 'Expand Today mini view' }).waitFor();
+        await native.evaluate(window => window.setPosition(500, 500));
+        const origin = await native.evaluate(window => window.getBounds());
+        const state = () => mini.evaluate(() => window.miniAPI.getWindowState());
+        await mini.getByRole('button', { name: 'Expand Today mini view' }).hover();
+        await until(async () => (await state()).preview, 'hover opens temporary preview');
+        assert.equal(await mini.locator('.mini-preview-ball').count(), 1);
+        const saved = JSON.parse(fs.readFileSync(path.join(evidence, 'userData/mini-window-state.json'), 'utf8'));
+        assert.equal(saved.mode, 'ball', 'temporary preview is not persisted as expanded');
+        assert.equal(saved.x, origin.x); assert.equal(saved.y, origin.y);
+        await mini.locator('.mini-view-switch').hover();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        assert.equal((await state()).preview, true, 'entering panel keeps preview open');
+        await mini.mouse.move(-30, -30);
+        await until(async () => (await state()).mode === 'ball', 'leaving restores ball');
+        assert.deepEqual(await native.evaluate(window => window.getBounds()), origin);
+        await mini.getByRole('button', { name: 'Expand Today mini view' }).hover();
+        await until(async () => (await state()).preview, 'second hover opens preview');
+        await mini.getByRole('button', { name: 'Expand Today mini view' }).click();
+        await until(async () => !(await state()).preview && (await state()).mode === 'expanded', 'click pins panel');
+        await mini.mouse.move(-30, -30);
+        await new Promise(resolve => setTimeout(resolve, 400));
+        assert.equal((await state()).mode, 'expanded', 'pinned panel stays expanded');
+        await mini.evaluate(() => window.miniAPI.collapse());
+        await until(async () => (await state()).mode === 'ball', 'collapse restores ball');
+        await mini.evaluate(() => window.miniAPI.beginDrag());
+        await mini.evaluate(() => window.miniAPI.preview());
+        assert.equal((await state()).mode, 'ball', 'drag suppresses preview');
+        await mini.evaluate(() => window.miniAPI.endDrag());
+        const area = await app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
+        await native.evaluate((window, area) => window.setPosition(area.x, area.y + 200), area);
+        await mini.evaluate(() => window.miniAPI.endDrag());
+        await until(async () => (await state()).mode === 'docked', 'ball docks at left edge');
+        const docked = await native.evaluate(window => window.getBounds());
+        await mini.evaluate(() => window.miniAPI.preview());
+        await until(async () => (await state()).preview, 'docked tab supports preview');
+        assert.equal(await mini.locator('.mini-preview.is-left').count(), 1);
+        await mini.evaluate(() => window.miniAPI.endPreview());
+        assert.equal((await state()).mode, 'docked');
+        assert.deepEqual(await native.evaluate(window => window.getBounds()), docked);
+        console.log('PASS mini hover peek, leave restoration, click pin, and drag suppression: ' + evidence);
+    } finally { await app.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

@@ -11,6 +11,8 @@ declare global {
             moveResize: (pointer: MiniPointer) => Promise<void>;
             endResize: () => Promise<void>;
             getWindowState: () => Promise<MiniWindowState>;
+            preview: () => Promise<void>;
+            endPreview: () => Promise<void>;
             expand: () => Promise<void>;
             collapse: () => Promise<void>;
             beginDrag: () => Promise<void>;

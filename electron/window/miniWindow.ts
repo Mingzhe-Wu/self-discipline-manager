@@ -16,6 +16,7 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
     let state: MiniWindowState = { mode: "ball", edge: null };
     let drag: { x: number; y: number; pointerX: number; pointerY: number } | null = null;
     let resize: { edge: MiniResizeEdge; pointer: MiniPointer; bounds: Electron.Rectangle; area: Electron.Rectangle } | null = null;
+    let previewOrigin: { bounds: Electron.Rectangle; state: MiniWindowState } | null = null;
     const areas = () => screen.getAllDisplays().map(display => display.workArea);
     const size = () => state.mode === "expanded" ? panelSize : { width: state.mode === "docked" ? 32 : 56, height: 56 };
     const getState = (): MiniWindowState => ({ ...state });
@@ -23,7 +24,7 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
         if (saveTimer) clearTimeout(saveTimer); saveTimer = undefined;
         if (!window || window.isDestroyed()) return;
         try {
-            fs.writeFileSync(file + ".tmp", JSON.stringify({ ...window.getBounds(), ...state, panelSize }), "utf8");
+            fs.writeFileSync(file + ".tmp", JSON.stringify({ ...(previewOrigin?.bounds ?? window.getBounds()), ...(previewOrigin?.state ?? state), panelSize }), "utf8");
             fs.renameSync(file + ".tmp", file);
         } catch (error) { console.error("Could not save mini window position", error); }
     }
@@ -53,12 +54,24 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
     }
     function expand() {
         if (!window || window.isDestroyed()) return;
+        if (state.preview) { previewOrigin = null; state = { mode: "expanded", edge: null }; emit(); return; }
         const bounds = window.getBounds(), edge = state.edge;
         state = { mode: "expanded", edge: null };
         place({ x: edge === "left" ? bounds.x : bounds.x + bounds.width - panelSize.width, y: bounds.y + bounds.height - panelSize.height }); emit();
     }
+    function preview() {
+        if (!window || window.isDestroyed() || drag || state.mode === "expanded" || fullscreen || !wantsVisible) return;
+        previewOrigin = { bounds: window.getBounds(), state: { ...state } };
+        expand(); state = { ...state, edge: previewOrigin.state.edge, preview: true }; emit();
+    }
+    function endPreview() {
+        if (!state.preview || !previewOrigin) return;
+        const origin = previewOrigin; previewOrigin = null; state = origin.state;
+        place(origin.bounds); emit();
+    }
     function collapse() {
         if (!window || window.isDestroyed()) return;
+        if (state.preview) { endPreview(); return; }
         const bounds = window.getBounds(); state = { mode: "ball", edge: null };
         place({ x: bounds.x + bounds.width - 56, y: bounds.y + bounds.height - 56 }); emit(); dock();
     }
@@ -71,10 +84,10 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
     const stopObserving = observeFullscreen(active => {
         const wasFullscreen = fullscreen;
         fullscreen = active;
-        if (active) { drag = null; resize = null; window?.hide(); }
+        if (active) { endPreview(); drag = null; resize = null; window?.hide(); }
         else if (wasFullscreen) reveal();
     });
-    function hide() { wantsVisible = false; ++visibilityRevision; drag = null; resize = null; if (window && !window.isDestroyed()) { save(); window.hide(); } }
+    function hide() { endPreview(); wantsVisible = false; ++visibilityRevision; drag = null; resize = null; if (window && !window.isDestroyed()) { save(); window.hide(); } }
     async function show() {
         if (disposed) return;
         wantsVisible = true;
@@ -116,7 +129,7 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
         }
     }
     return {
-        getWindow: () => window, getState, expand, collapse,
+        getWindow: () => window, getState, preview, endPreview, expand, collapse,
         showBallMenu() {
             if (!window || window.isDestroyed() || !window.isVisible() || state.mode === "expanded") return;
             Menu.buildFromTemplate([{ id: "close-mini-ball", label: "Close floating ball", click: hide }]).popup({ window });
@@ -125,6 +138,7 @@ export function createMiniWindowController({ userData, rendererUrl, preload, onV
             if (!["n", "s", "e", "w", "ne", "nw", "se", "sw"].includes(edge)) throw new Error("Invalid resize edge");
             if (!pointer || ![pointer.x, pointer.y].every(value => Number.isFinite(value) && Math.abs(value) < 1_000_000)) throw new Error("Invalid pointer");
             if (!window || window.isDestroyed() || state.mode !== "expanded") return;
+            if (state.preview) expand();
             const bounds = window.getBounds();
             resize = { edge, pointer, bounds, area: screen.getDisplayMatching(bounds).workArea };
         },

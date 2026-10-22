@@ -7,5 +7,6 @@ export interface MiniPointer { x: number; y: number }
 export interface MiniToday extends WeekSchedule { now: number; date: string; timeZone: string }
 export interface MiniWindowState {
     mode: "ball" | "expanded" | "docked";
+    preview?: boolean;
     edge: "left" | "right" | null;
 }

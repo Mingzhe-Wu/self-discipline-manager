@@ -161,7 +161,7 @@ if (!app.requestSingleInstanceLock()) {
         const validateSender = createSenderValidator(() => mainWindow, rendererUrl);
         registerTaskIpc(validateSender, dataChanged);
         registerSettingsIpc(validateSender, settingsChanged);
-        registerMiniIpc(createSenderValidator(() => mini?.getWindow() ?? null, miniUrl), { showBallMenu: mini.showBallMenu, openMain: showMainWindow, changed: dataChanged, getState: mini.getState, expand: mini.expand, collapse: mini.collapse, beginDrag: mini.beginDrag, moveDrag: mini.moveDrag, endDrag: mini.endDrag, beginResize: mini.beginResize, moveResize: mini.moveResize, endResize: mini.endResize, openTask: details => { showMainWindow(); mainWindow?.webContents.send("task:open-details", details); } });
+        registerMiniIpc(createSenderValidator(() => mini?.getWindow() ?? null, miniUrl), { showBallMenu: mini.showBallMenu, openMain: showMainWindow, changed: dataChanged, getState: mini.getState, preview: mini.preview, endPreview: mini.endPreview, expand: mini.expand, collapse: mini.collapse, beginDrag: mini.beginDrag, moveDrag: mini.moveDrag, endDrag: mini.endDrag, beginResize: mini.beginResize, moveResize: mini.moveResize, endResize: mini.endResize, openTask: details => { showMainWindow(); mainWindow?.webContents.send("task:open-details", details); } });
         await createWindow();
         if (isQuitting) return;
         createTray();
